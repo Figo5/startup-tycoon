@@ -13,7 +13,7 @@ and `node tools/playtest.mjs` as run on this machine.
 | Employees | complete | 10 roles, skill/productivity/experience/morale/specialty, promote, reassign, fire |
 | Departments | complete | 6 departments, 3 priorities each, managers, manager-driven automation |
 | Office | complete | 6 tiers, 8 rooms, both redraw the generated floor plan |
-| Infrastructure | complete | capacity/load/cost/reliability/outages, autoscaling research |
+| Infrastructure | complete | capacity/load/cost/reliability/outages, ops backstop, autoscaling research |
 | Economy | complete | cash, burn, runway, valuation, contracts, non-fatal emergency measures |
 | Funding | complete | 6 rounds, dilution tracked and applied to the exit payout |
 | Competitors | complete | 7 rivals, per-market share, expansion, failure, acquisition |
@@ -45,17 +45,18 @@ tools/balance.js               milestone/checkpoint report (uses tools/balance_l
 tools/balance_lib.js           the scripted operator that drives balance runs
 tools/diag.js                  one-run product-by-product diagnostic
 tools/playtest.mjs             scripted browser playtest, writes shots/
-test/*.test.js                 46 tests: economy, company, save, events, prestige, active play
+test/*.test.js                 48 tests: economy, company, save, events, prestige, active play
 ```
 
 ## Test results
 
-`npm test` — **46 tests, 46 pass, 0 fail** (~0.7 s).
+`npm test` — **48 tests, 48 pass, 0 fail** (~1 s).
 
 Coverage by area:
 
-- **economy.test.js** (7) — revenue generation, payroll scaling, burn, infrastructure
-  cost and reliability under overload, valuation response, contracts, no hard bankruptcy.
+- **economy.test.js** (9) — revenue generation, payroll scaling, burn, infrastructure
+  cost and reliability under overload, valuation response, contracts, no hard bankruptcy, the ops backstop rescuing an unattended overloaded company, and
+  hand-sized capacity still beating that backstop.
 - **company.test.js** (12) — hiring, desk limits, firing/severance, project completion
   and effects, department priorities, manager automation, stage unlock ordering,
   funding/dilution, research cost-time-effect, office upgrade gating, competitor
@@ -106,6 +107,10 @@ Checked for the failure modes the spec calls out:
 - **No exponential exploit found.** The most obvious one — shipping four copies of the
   cheapest product — was measured at $10.6K/day and now splits one market instead of
   creating four.
+- **No unattended death spiral.** An offline company whose infrastructure is badly
+  overloaded has ops creep capacity up toward barely-enough rather than looping outages.
+  Sizing capacity yourself, or researching autoscaling, still gives strictly better
+  reliability and cost — the backstop reacts slowly and never buys headroom.
 - **No early prestige farming.** Exits are gated behind the Late Stage or a scale-up
   acquisition offer. An early acquisition exit pays roughly half the reputation of a
   Late-Stage IPO, so cashing out early is a real but costly choice.

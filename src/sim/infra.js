@@ -6,7 +6,8 @@ import { prioritySplit } from './workforce.js';
 import { liveProducts, totalCustomers } from './products.js';
 
 export const UNIT_COST_DAY = 3.2;      // $ per capacity unit per day
-export const TARGET_UTILIZATION = 0.7; // what autoscaling aims for
+export const TARGET_UTILIZATION = 0.7;  // what autoscaling aims for
+export const EMERGENCY_UTILIZATION = 1.25; // beyond this, ops steps in without you
 
 export function effectiveCapacity(state, mods) {
   return state.infra.capacity * mul(mods, 'capacityPerUnit') + flat(mods, 'capacity');
@@ -31,8 +32,19 @@ export function tickInfra(state, mods, wf, days, log) {
 
   if (has(mods, 'autoscale')) {
     const want = Math.ceil(infra.load / TARGET_UTILIZATION / mul(mods, 'capacityPerUnit'));
-    const bounded = clamp(want, 8, Math.max(8, want));
-    if (bounded !== infra.capacity) infra.capacity = bounded;
+    infra.capacity = Math.max(8, want);
+  } else if (infra.load > effectiveCapacity(state, mods) * EMERGENCY_UTILIZATION) {
+    // Ops will not let an unattended company burn down: capacity creeps up toward
+    // barely-enough. Sizing it yourself (or researching autoscaling) is still better,
+    // because this reacts slowly and never reaches a comfortable headroom.
+    const want = infra.load / 0.95 / mul(mods, 'capacityPerUnit');
+    const step = Math.max(1, infra.capacity * 0.25 * days);
+    if (want > infra.capacity) {
+      infra.capacity = Math.min(want, infra.capacity + step);
+      if (!infra.emergencyNoted) { log?.('Ops scaled capacity up to keep the service alive.', 'bad'); infra.emergencyNoted = true; }
+    }
+  } else {
+    infra.emergencyNoted = false;
   }
 
   const cap = Math.max(1, effectiveCapacity(state, mods));
@@ -65,7 +77,7 @@ export function tickInfra(state, mods, wf, days, log) {
 export function startOutage(state, mods, product, log) {
   const dur = range(state.rng, 0.15, 0.6) * mul(mods, 'outageDuration', -0.85);
   product.outage = Math.max(product.outage, dur);
-  state.infra.outageTimer = 2.5;
+  state.infra.outageTimer = 4;
   log?.(`${product.name} is down. Reliability ${(state.infra.reliability * 100).toFixed(1)}%.`, 'bad');
   return dur;
 }
