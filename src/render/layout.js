@@ -114,6 +114,12 @@ export function buildLayout(tierId, ownedRooms = []) {
   return { tierId, w: W, h: H, tiles, furniture, deskSlots, rooms, walkable, doorX };
 }
 
+/** Room label anchor in world pixels, snapped so glyphs land on whole pixels. */
+export const roomLabelPos = (room, tile) => ({
+  x: Math.round((room.x + room.w / 2) * tile),
+  y: Math.round((room.y - 0.35) * tile)
+});
+
 /** 4-way BFS path on the walkable grid. Returns [] when there is no route. */
 export function findPath(layout, from, to) {
   const { w, h, walkable } = layout;

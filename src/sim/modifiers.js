@@ -1,7 +1,7 @@
 import { researchById } from '../data/research.js';
 import { roomById } from '../data/office.js';
 import { SCENARIOS } from '../data/prestige.js';
-import { stageById, stageOrder } from '../data/stages.js';
+import { STAGES, stageById, stageOrder } from '../data/stages.js';
 import { metaEffects } from './state.js';
 
 const FLAT_KEYS = new Set(['capacity', 'deskBonus', 'candidateSlots']);
@@ -31,7 +31,12 @@ export function computeMods(state) {
   merge((SCENARIOS.find((s) => s.id === state.scenarioId) || {}).mods);
 
   const stage = stageById(state.company.stage);
-  for (const u of stage?.unlocks || []) flags.add(u);
+  // Unlocks are cumulative: everything earned at or below the current stage
+  // stays unlocked. Reading only the current stage's list silently relocked
+  // research (and departments, funding, ...) the moment the company grew.
+  for (const s of STAGES) {
+    if (s.order <= (stage?.order ?? 0)) for (const u of s.unlocks || []) flags.add(u);
+  }
   for (const s of state.flags.unlocked) flags.add(s);
   if (state.infra.autoscale) flags.add('autoscale');
 

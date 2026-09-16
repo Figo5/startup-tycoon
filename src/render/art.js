@@ -4,6 +4,13 @@
 
 export const TILE = 16;
 
+// Camera zoom ceiling (see OfficeScene). Text is rasterised once, so a label
+// drawn at resolution 1 is a 9px bitmap magnified by the zoom - which is why
+// room labels looked blurry. Rasterising at the zoom ceiling instead keeps the
+// display size identical and the glyphs crisp at every zoom.
+export const MAX_ZOOM = 4;
+export const labelResolution = (dpr = 1) => Math.min(8, MAX_ZOOM * Math.max(1, dpr));
+
 const PAL = {
   '.': null,                 // transparent
   o: '#2a2733', O: '#1b1924', // outlines

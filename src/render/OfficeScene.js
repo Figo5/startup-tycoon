@@ -1,8 +1,16 @@
 import Phaser from 'phaser';
-import { TILE, buildTextures, personKey, SHIRTS } from './art.js';
-import { buildLayout, findPath } from './layout.js';
+import { TILE, MAX_ZOOM, labelResolution, buildTextures, personKey, SHIRTS } from './art.js';
+import { buildLayout, findPath, roomLabelPos } from './layout.js';
 
 const SPEED = 3.2;          // tiles per second
+
+/** pixelArt mode filters every texture NEAREST; label canvases are the one
+ *  place we want LINEAR, so the high-resolution glyphs resample cleanly at
+ *  fractional zoom instead of losing rows of pixels. */
+function crispLabel(text) {
+  text.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+  return text;
+}
 const ACTIVITY_COLORS = {
   coding: 0x5aa9e6, meeting: 0xf2b134, selling: 0xef6f6c, supporting: 0x6ec07a,
   fixing: 0xa184e0, researching: 0x4db6ac, break: 0xf2c14e, idle: 0x8a8a9a
@@ -33,14 +41,16 @@ export default class OfficeScene extends Phaser.Scene {
     this.peopleLayer = this.add.container(0, 0).setDepth(10);
     this.labelLayer = this.add.container(0, 0).setDepth(20);
 
+    this.labelResolution = labelResolution(globalThis.devicePixelRatio || 1);
     this.cameras.main.setBackgroundColor('#15131d');
     this.setupCameraControls();
     this.rebuild();
 
-    this.alertText = this.add.text(8, 8, '', {
+    this.alertText = crispLabel(this.add.text(8, 8, '', {
       fontFamily: 'monospace', fontSize: '14px', color: '#ffd7d7',
-      backgroundColor: '#8b1e1e', padding: { x: 6, y: 3 }
-    }).setScrollFactor(0).setDepth(100).setVisible(false);
+      backgroundColor: '#8b1e1e', padding: { x: 6, y: 3 },
+      resolution: this.labelResolution
+    })).setScrollFactor(0).setDepth(100).setVisible(false);
 
     this.scale.on('resize', () => this.time.delayedCall(40, () => this.clampCamera()));
   }
@@ -70,10 +80,12 @@ export default class OfficeScene extends Phaser.Scene {
 
     this.labelLayer.removeAll(true);
     for (const r of this.layout.rooms) {
-      const t = this.add.text((r.x + r.w / 2) * TILE, (r.y - 0.35) * TILE, r.name, {
+      const pos = roomLabelPos(r, TILE);
+      const t = crispLabel(this.add.text(pos.x, pos.y, r.name, {
         fontFamily: 'monospace', fontSize: '9px', color: '#ffe9a8',
-        backgroundColor: '#1b1924', padding: { x: 3, y: 1 }
-      }).setOrigin(0.5, 0);
+        backgroundColor: '#1b1924', padding: { x: 3, y: 1 },
+        resolution: this.labelResolution
+      })).setOrigin(0.5, 0);
       this.labelLayer.add(t);
     }
 
@@ -93,7 +105,7 @@ export default class OfficeScene extends Phaser.Scene {
       cam.scrollY -= (p.y - p.prevPosition.y) / cam.zoom;
     });
     this.input.on('wheel', (p, over, dx, dy) => {
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom - dy * 0.0015, 0.7, 4));
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - dy * 0.0015, 0.7, MAX_ZOOM));
     });
     const keys = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT,Q,E');
     this.camKeys = keys;
@@ -208,8 +220,8 @@ export default class OfficeScene extends Phaser.Scene {
       if (k.D.isDown || k.RIGHT.isDown) cam.scrollX += pan;
       if (k.W.isDown || k.UP.isDown) cam.scrollY -= pan;
       if (k.S.isDown || k.DOWN.isDown) cam.scrollY += pan;
-      if (k.Q.isDown) cam.setZoom(Phaser.Math.Clamp(cam.zoom - dt * 1.5, 0.7, 4));
-      if (k.E.isDown) cam.setZoom(Phaser.Math.Clamp(cam.zoom + dt * 1.5, 0.7, 4));
+      if (k.Q.isDown) cam.setZoom(Phaser.Math.Clamp(cam.zoom - dt * 1.5, 0.7, MAX_ZOOM));
+      if (k.E.isDown) cam.setZoom(Phaser.Math.Clamp(cam.zoom + dt * 1.5, 0.7, MAX_ZOOM));
     }
 
     const state = this.game$.state;
