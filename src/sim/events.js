@@ -97,17 +97,19 @@ export function tickEvents(state, mods, days, log) {
   }
   // Unattended events resolve to the conservative default.
   for (const p of state.events.pending.slice()) {
-    if (state.time.day >= p.expiresDay) {
-      const def = eventById(p.eventId);
-      const auto = def.choices.find((c) => c.id === def.auto) || def.choices[def.choices.length - 1];
-      const cost = choiceCost(state, auto);
-      if (cost > state.company.cash) {
-        const free = def.choices.find((c) => choiceCost(state, c) === 0 && !c.minigame);
-        resolveEvent(state, mods, p.id, (free || auto).id, log);
-      } else {
-        resolveEvent(state, mods, p.id, auto.id, log);
-      }
-    }
+    if (state.time.day < p.expiresDay) continue;
+    const def = eventById(p.eventId);
+    const auto = def.choices.find((c) => c.id === def.auto) || def.choices[def.choices.length - 1];
+    const affordable = (c) => !c.minigame && choiceCost(state, c) <= state.company.cash;
+    const choice = affordable(auto) ? auto
+      : def.choices.filter(affordable).sort((a, b) => choiceCost(state, a) - choiceCost(state, b))[0];
+    if (choice) { resolveEvent(state, mods, p.id, choice.id, log); continue; }
+    // Every option costs more than the company has. Let it lapse rather than
+    // leave it pending forever, holding an inbox slot against the cap.
+    state.events.pending = state.events.pending.filter((x) => x.id !== p.id);
+    state.events.log.unshift({ day: state.time.day, title: def.title, choice: 'Lapsed' });
+    state.events.log = state.events.log.slice(0, 60);
+    log?.(`${def.title} lapsed - there was nothing you could afford to do.`, 'event');
   }
 }
 
