@@ -91,9 +91,9 @@ order, and only exits at the Late Stage).
 
 | Profile | First hire | Seed | Growing | Scale-Up | Major | First exit | FR |
 |---|---|---|---|---|---|---|---|
-| Idle (~30 min checks) | 1.0 h | 2.0–2.5 h | 4.0–4.5 h | 6.0–7.0 h | 9.5–10.5 h | 14.5–16.0 h | 10–11 |
-| Moderate (~12 min) | 0.4–0.8 h | 1.2–1.4 h | 1.8–2.2 h | 2.6–3.0 h | 4.2–4.8 h | 7.6–7.8 h | 10–13 |
-| Active (~5 min + minigames) | 0.1 h | 0.8 h | 1.2–1.4 h | 1.8–2.0 h | 3.2–3.3 h | 5.2–5.6 h | 11–12 |
+| Idle (~30 min checks) | 1.0 h | 2.0–2.5 h | 4.0–5.5 h | 6.0–7.5 h | 8.5–9.5 h | 11.0–12.5 h | 11–14 |
+| Moderate (~12 min) | 0.4–0.8 h | 1.2–1.4 h | 1.8–2.0 h | 2.6–3.2 h | 4.2–4.8 h | 5.0–5.4 h | 11–14 |
+| Active (~5 min + minigames) | 0.1 h | 0.8 h | 1.2–1.4 h | 1.8–1.9 h | 2.7–2.9 h | 3.2–3.5 h | 12–13 |
 
 Checked for the failure modes the spec calls out:
 

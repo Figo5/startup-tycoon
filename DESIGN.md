@@ -87,11 +87,11 @@ operator over three seeds (`npm run balance`):
 
 | Player | First hire | Seed stage | Scale-Up | First exit |
 |---|---|---|---|---|
-| Idle (checks ~30 min) | ~1.0 h | ~2.0–2.5 h | ~6–7 h | ~14.5–16 h |
-| Moderate (~12 min) | ~0.4–0.8 h | ~1.2–1.4 h | ~2.6–3.0 h | ~7.6–7.8 h |
-| Active (~5 min + minigames) | ~0.1 h | ~0.8 h | ~1.8–2.0 h | ~5.2–5.6 h |
+| Idle (checks ~30 min) | ~1.0 h | ~2.0–2.5 h | ~6–7.5 h | ~11–12.5 h |
+| Moderate (~12 min) | ~0.4–0.8 h | ~1.2–1.4 h | ~2.6–3.2 h | ~5.0–5.4 h |
+| Active (~5 min + minigames) | ~0.1 h | ~0.8 h | ~1.8–1.9 h | ~3.2–3.5 h |
 
-A first exit pays 10–13 Founder Reputation, against prestige tracks costing 2–12 for
+A first exit pays 11–14 Founder Reputation, against prestige tracks costing 2–12 for
 their first level — enough for two or three meaningful picks, not the whole board.
 
 ## Save strategy
