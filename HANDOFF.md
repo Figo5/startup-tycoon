@@ -79,7 +79,7 @@ Coverage by area:
 
 `npm run balance` — three seeds (11, 202, 3003) × three player profiles, 40 real-hour
 horizon. Full output in `balance-report.txt`.
-Second product lands at 0.3–1.5 h, the first manager at 1.4–5.0 h, the first funding
+Second product lands at 0.3–1.5 h, the first manager at 1.3–5.0 h, the first funding
 round at 0.5–1.0 h and the first enterprise customer at 1.4–3.5 h, depending on profile.
 
 Assumptions, stated as the tool prints them: 1 game day = 2 real minutes; offline time
@@ -91,9 +91,9 @@ order, and only exits at the Late Stage).
 
 | Profile | First hire | Seed | Growing | Scale-Up | Major | First exit | FR |
 |---|---|---|---|---|---|---|---|
-| Idle (~30 min checks) | 1.0 h | 2.0–2.5 h | 4.0–5.0 h | 6.0–7.0 h | 9.0–10.5 h | 14.5–16.0 h | 9–11 |
-| Moderate (~12 min) | 0.4–0.8 h | 1.2–1.4 h | 1.8–2.0 h | 2.6–2.8 h | 4.2–4.6 h | 7.4–7.7 h | 12–13 |
-| Active (~5 min + minigames) | 0.1 h | 0.7–0.9 h | 1.4–1.9 h | 1.9–2.3 h | 3.1–3.6 h | 4.1–5.0 h | 11–13 |
+| Idle (~30 min checks) | 1.0 h | 2.0–2.5 h | 4.0–4.5 h | 6.0–7.0 h | 9.5–10.5 h | 14.5–16.0 h | 10–11 |
+| Moderate (~12 min) | 0.4–0.8 h | 1.2–1.4 h | 1.8–2.2 h | 2.6–3.0 h | 4.2–4.8 h | 7.6–7.8 h | 10–13 |
+| Active (~5 min + minigames) | 0.1 h | 0.8 h | 1.2–1.4 h | 1.8–2.0 h | 3.2–3.3 h | 5.2–5.6 h | 11–12 |
 
 Checked for the failure modes the spec calls out:
 
