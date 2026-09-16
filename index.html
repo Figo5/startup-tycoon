@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Startup Tycoon</title>
+  <link rel="stylesheet" href="./src/ui/styles.css" />
+</head>
+<body>
+  <div id="app" aria-busy="true">
+    <header id="topbar" role="banner">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">▚</span>
+        <span id="company-name">Untitled Inc.</span>
+        <span id="stage-chip" class="chip">Solo Founder</span>
+      </div>
+      <dl id="stats" aria-label="Company vitals"></dl>
+      <div class="top-actions">
+        <button id="btn-pause" class="ghost" aria-pressed="false" title="Pause the simulation (Space)">Pause</button>
+        <button id="btn-help" class="ghost" title="How to play (?)">?</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="game" aria-label="Office view"></section>
+      <aside id="side" aria-label="Events and notifications">
+        <div id="events-wrap">
+          <h2>Inbox</h2>
+          <div id="events" role="log" aria-live="polite"></div>
+        </div>
+        <div id="feed-wrap">
+          <h2>Activity</h2>
+          <ol id="feed" role="log" aria-live="off"></ol>
+        </div>
+      </aside>
+      <div id="drawer" class="drawer" role="dialog" aria-modal="false" aria-labelledby="drawer-title" hidden>
+        <header>
+          <h2 id="drawer-title">Panel</h2>
+          <button id="drawer-close" class="ghost" aria-label="Close panel">✕</button>
+        </header>
+        <div id="drawer-body" tabindex="-1"></div>
+      </div>
+    </main>
+
+    <nav id="tabs" aria-label="Management">
+      <button data-panel="company">Company</button>
+      <button data-panel="products">Products</button>
+      <button data-panel="employees">Employees</button>
+      <button data-panel="departments">Departments</button>
+      <button data-panel="research">Research</button>
+      <button data-panel="finance">Finance</button>
+      <button data-panel="office">Office</button>
+      <button data-panel="competitors">Competitors</button>
+    </nav>
+
+    <div id="overlay" class="overlay" role="dialog" aria-modal="true" hidden>
+      <div id="overlay-card" class="card"></div>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

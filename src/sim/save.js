@@ -1,0 +1,155 @@
+import { SAVE_VERSION, emptyMeta, newGame } from './state.js';
+import { getIdCounter, setIdCounter } from './util.js';
+
+export const SAVE_KEY = 'startup-tycoon/save/v1';
+export const CORRUPT_KEY = 'startup-tycoon/corrupt';
+export const TAB_KEY = 'startup-tycoon/tab';
+
+const STRIP = ['modCache', 'workforceCache', 'pendingEventSubject'];
+
+export function serialize(state) {
+  const clone = {};
+  for (const [k, v] of Object.entries(state)) {
+    if (STRIP.includes(k) || k === 'meta') continue;
+    clone[k] = v;
+  }
+  return {
+    version: SAVE_VERSION,
+    savedAt: Date.now(),
+    idCounter: getIdCounter(),
+    meta: state.meta || emptyMeta(),
+    state: clone
+  };
+}
+
+/** Structural validation. Returns { ok, reason }. Never mutates the input. */
+export function validate(blob) {
+  if (!blob || typeof blob !== 'object') return { ok: false, reason: 'Not an object' };
+  if (typeof blob.version !== 'number') return { ok: false, reason: 'Missing version' };
+  if (blob.version > SAVE_VERSION) return { ok: false, reason: `Save is from a newer build (v${blob.version})` };
+  const s = blob.state;
+  if (!s || typeof s !== 'object') return { ok: false, reason: 'Missing state' };
+  const required = ['company', 'products', 'employees', 'time', 'stats', 'infra', 'research'];
+  for (const k of required) if (!s[k]) return { ok: false, reason: `Missing ${k}` };
+  if (!Array.isArray(s.products) || !Array.isArray(s.employees)) return { ok: false, reason: 'Bad collections' };
+  if (typeof s.company.cash !== 'number' || !Number.isFinite(s.company.cash)) return { ok: false, reason: 'Bad cash value' };
+  if (typeof s.time.day !== 'number' || s.time.day < 0) return { ok: false, reason: 'Bad clock' };
+  if (!s.rng || typeof s.rng.s !== 'number') return { ok: false, reason: 'Missing RNG state' };
+  return { ok: true };
+}
+
+const MIGRATIONS = {
+  1: (blob) => {
+    blob.state.contracts = blob.state.contracts || [];
+    blob.state.boosts = blob.state.boosts || [];
+    blob.version = 2;
+    return blob;
+  },
+  2: (blob) => {
+    blob.state.flags = blob.state.flags || { unlocked: [] };
+    blob.state.funding = blob.state.funding || { rounds: [], offers: [], exitOffers: [] };
+    blob.state.stats.history = blob.state.stats.history || [];
+    blob.version = 3;
+    return blob;
+  }
+};
+
+export function migrate(blob) {
+  let guard = 0;
+  while (blob.version < SAVE_VERSION && guard++ < 20) {
+    const fn = MIGRATIONS[blob.version];
+    if (!fn) { blob.version = SAVE_VERSION; break; }
+    blob = fn(blob);
+  }
+  return blob;
+}
+
+export function hydrate(blob) {
+  const v = validate(blob);
+  if (!v.ok) return { ok: false, reason: v.reason };
+  const migrated = migrate(structuredClone(blob));
+  const state = migrated.state;
+  state.meta = migrated.meta || emptyMeta();
+  state.version = SAVE_VERSION;
+  setIdCounter(migrated.idCounter || 1);
+  // Defensive defaults for anything a future field might rely on.
+  state.notifications = state.notifications || [];
+  state.boosts = state.boosts || [];
+  state.contracts = state.contracts || [];
+  state.candidates = state.candidates || [];
+  state.events = state.events || { pending: [], cooldown: 2, log: [], seen: {} };
+  state.stats.history = state.stats.history || [];
+  return { ok: true, state, savedAt: migrated.savedAt };
+}
+
+// --- storage ---
+const store = () => (typeof localStorage !== 'undefined' ? localStorage : null);
+
+export function save(state) {
+  const ls = store();
+  if (!ls) return false;
+  try {
+    ls.setItem(SAVE_KEY, JSON.stringify(serialize(state)));
+    return true;
+  } catch (err) {
+    console.warn('Save failed', err);
+    return false;
+  }
+}
+
+export function load() {
+  const ls = store();
+  if (!ls) return { ok: false, reason: 'No storage' };
+  const raw = ls.getItem(SAVE_KEY);
+  if (!raw) return { ok: false, reason: 'No save' };
+  let blob;
+  try { blob = JSON.parse(raw); } catch {
+    ls.setItem(CORRUPT_KEY, raw);
+    return { ok: false, reason: 'Save file was unreadable. A copy was kept under the recovery key.', corrupt: true };
+  }
+  const r = hydrate(blob);
+  if (!r.ok) {
+    ls.setItem(CORRUPT_KEY, raw);
+    return { ok: false, reason: `${r.reason}. The old save was kept under the recovery key.`, corrupt: true };
+  }
+  return r;
+}
+
+export function loadMeta() {
+  const r = load();
+  return r.ok ? (r.state.meta || emptyMeta()) : emptyMeta();
+}
+
+export function resetGame(keepMeta = true) {
+  const meta = keepMeta ? loadMeta() : emptyMeta();
+  const ls = store();
+  if (ls) ls.removeItem(SAVE_KEY);
+  return newGame({ meta });
+}
+
+export function exportSave(state) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(serialize(state)))));
+}
+
+export function importSave(text) {
+  let blob;
+  try {
+    const json = text.trim().startsWith('{') ? text : decodeURIComponent(escape(atob(text.trim())));
+    blob = JSON.parse(json);
+  } catch {
+    return { ok: false, reason: 'That does not look like a Startup Tycoon save.' };
+  }
+  return hydrate(blob);   // caller replaces state only if ok
+}
+
+// --- single-tab guard ---
+export function claimTab(id) {
+  const ls = store();
+  if (!ls) return { owner: true };
+  const now = Date.now();
+  let cur = null;
+  try { cur = JSON.parse(ls.getItem(TAB_KEY) || 'null'); } catch { cur = null; }
+  if (cur && cur.id !== id && now - cur.at < 6000) return { owner: false, other: cur.id };
+  ls.setItem(TAB_KEY, JSON.stringify({ id, at: now }));
+  return { owner: true };
+}
