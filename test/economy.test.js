@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { game, mods, run, launch } from './helpers.js';
 import { step } from '../src/sim/engine.js';
 import { computeWorkforce } from '../src/sim/workforce.js';
-import { tickInfra, effectiveCapacity, setCapacity } from '../src/sim/infra.js';
+import { tickInfra, effectiveCapacity, setCapacity, computeLoad } from '../src/sim/infra.js';
 import { valuation, addContract } from '../src/sim/economy.js';
 import { liveProducts, totalCustomers } from '../src/sim/products.js';
 
@@ -78,4 +78,28 @@ test('the company never goes hard bankrupt', () => {
   run(s, 20);
   assert.ok(s.company.cash >= 0, 'cash is floored at zero');
   assert.equal(s.company.marketingBudget, 0, 'marketing is cut first');
+});
+
+test('an unattended overloaded company is rescued by ops rather than spiralling', () => {
+  const s = game(8);
+  launch(s);
+  s.products[0].users = 400000;          // far past the starting capacity
+  setCapacity(s, 8);
+  const start = s.infra.capacity;
+  run(s, 30);
+  assert.ok(s.infra.capacity > start * 2, `ops should scale up: ${start} -> ${s.infra.capacity}`);
+  assert.ok(s.infra.utilization < 1.2, `utilisation should come back under control: ${s.infra.utilization}`);
+  assert.ok(s.infra.reliability > 0.55, `reliability should recover: ${s.infra.reliability}`);
+});
+
+test('sizing capacity yourself still beats the emergency backstop', () => {
+  const managed = game(9);
+  const neglected = game(9);
+  for (const s of [managed, neglected]) { launch(s); s.products[0].users = 200000; }
+  setCapacity(managed, Math.ceil(computeLoad(managed) / 0.7));
+  setCapacity(neglected, 8);
+  run(managed, 20);
+  run(neglected, 20);
+  assert.ok(managed.infra.reliability > neglected.infra.reliability,
+    `managed ${managed.infra.reliability} vs neglected ${neglected.infra.reliability}`);
 });
