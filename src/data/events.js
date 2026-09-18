@@ -13,7 +13,7 @@ const rent = (s) => Math.max(1500, s.stats.rentDay * 30);
 
 export const EVENTS = [
   {
-    id: 'viral_post', title: 'Something Went Viral', weight: 10, expires: 2.5,
+    id: 'viral_post', cat: 'market', title: 'Something Went Viral', weight: 10, expires: 2.5,
     cond: (s) => consumer(s).length > 0,
     text: (s) => `A post about ${(consumer(s)[0] || {}).name} is climbing every feed. The window is hours, not weeks.`,
     choices: [
@@ -26,7 +26,7 @@ export const EVENTS = [
     auto: 'ride'
   },
   {
-    id: 'outage', title: 'Service Outage', weight: 12, expires: 1.5, minStage: 'tiny',
+    id: 'outage', cat: 'infra', title: 'Service Outage', weight: 12, expires: 1.5, minStage: 'tiny',
     cond: (s) => live(s).length > 0,
     text: () => 'Everything is down. The status page is the only thing still up.',
     choices: [
@@ -41,7 +41,7 @@ export const EVENTS = [
     auto: 'infra'
   },
   {
-    id: 'security', title: 'Security Disclosure', weight: 6, expires: 3, minStage: 'seed',
+    id: 'security', cat: 'infra', title: 'Security Disclosure', weight: 6, expires: 3, minStage: 'seed',
     cond: (s) => live(s).length > 0,
     text: () => 'A researcher emailed a working exploit and a 90-day clock.',
     choices: [
@@ -54,7 +54,7 @@ export const EVENTS = [
     auto: 'bounty'
   },
   {
-    id: 'star_candidate', title: 'Exceptional Candidate', weight: 9, expires: 3, minStage: 'tiny',
+    id: 'star_candidate', cat: 'people', title: 'Exceptional Candidate', weight: 9, expires: 3, minStage: 'tiny',
     text: () => 'Someone genuinely excellent is between jobs and likes what you are building.',
     choices: [
       { id: 'hire', label: 'Hire at a premium', desc: 'Adds a high-skill candidate at +35% salary.',
@@ -64,7 +64,7 @@ export const EVENTS = [
     auto: 'pass'
   },
   {
-    id: 'resignation', title: 'Resignation Letter', weight: 8, expires: 2, minStage: 'tiny',
+    id: 'resignation', cat: 'people', title: 'Resignation Letter', weight: 8, expires: 2, minStage: 'tiny',
     cond: (s) => s.employees.length > 2,
     text: (s) => `${s.pendingEventSubject || 'One of your team'} is leaving unless something changes.`,
     choices: [
@@ -77,7 +77,7 @@ export const EVENTS = [
     auto: 'let_go'
   },
   {
-    id: 'enterprise_inquiry', title: 'Enterprise Inquiry', weight: 10, expires: 4, minStage: 'growing',
+    id: 'enterprise_inquiry', cat: 'customers', title: 'Enterprise Inquiry', weight: 10, expires: 4, minStage: 'growing',
     cond: (s) => live(s).some((p) => p.enterpriseReady > 0.2),
     text: () => 'A company with a procurement department wants a serious conversation.',
     choices: [
@@ -92,7 +92,7 @@ export const EVENTS = [
     auto: 'smaller'
   },
   {
-    id: 'press', title: 'Press Interest', weight: 7, expires: 2.5, minStage: 'tiny',
+    id: 'press', cat: 'market', title: 'Press Interest', weight: 7, expires: 2.5, minStage: 'tiny',
     text: () => 'A reporter wants twenty minutes about how you got here.',
     choices: [
       { id: 'interview', label: 'Do the interview', desc: 'Reputation up, one founder-day gone.',
@@ -102,7 +102,7 @@ export const EVENTS = [
     auto: 'decline'
   },
   {
-    id: 'investor_interest', title: 'Investor Interest', weight: 6, expires: 4, minStage: 'tiny',
+    id: 'investor_interest', cat: 'money', title: 'Investor Interest', weight: 6, expires: 4, minStage: 'tiny',
     cond: (s) => s.funding.offers.length === 0,
     text: () => 'A fund has been watching your growth and would like to talk terms.',
     choices: [
@@ -113,7 +113,7 @@ export const EVENTS = [
     auto: 'ignore'
   },
   {
-    id: 'competitor_launch', title: 'Rival Product Launch', weight: 9, expires: 3, minStage: 'seed',
+    id: 'competitor_launch', cat: 'market', title: 'Rival Product Launch', weight: 9, expires: 3, minStage: 'seed',
     cond: (s) => live(s).length > 0,
     text: (s) => `${s.pendingEventSubject || 'A rival'} just launched straight at your best product.`,
     choices: [
@@ -127,7 +127,7 @@ export const EVENTS = [
     auto: 'ignore'
   },
   {
-    id: 'competitor_outage', title: 'Rival Is Down', weight: 6, expires: 2, minStage: 'seed',
+    id: 'competitor_outage', cat: 'market', title: 'Rival Is Down', weight: 6, expires: 2, minStage: 'seed',
     text: (s) => `${s.pendingEventSubject || 'A rival'} has been offline for six hours and counting.`,
     choices: [
       { id: 'campaign', label: 'Run a switch campaign', cost: (s) => Math.max(8000, s.stats.revenueDay * 3),
@@ -138,7 +138,7 @@ export const EVENTS = [
     auto: 'classy'
   },
   {
-    id: 'poaching', title: 'Recruiters Circling', weight: 7, expires: 2.5, minStage: 'growing',
+    id: 'poaching', cat: 'people', title: 'Recruiters Circling', weight: 7, expires: 2.5, minStage: 'growing',
     cond: (s) => s.employees.length > 5,
     text: () => 'A rival is calling your best people with numbers you did not budget for.',
     choices: [
@@ -151,14 +151,14 @@ export const EVENTS = [
     auto: 'walk'
   },
   {
-    id: 'market_boom', title: 'Market Upswing', weight: 5, expires: 1, minStage: 'seed',
+    id: 'market_boom', cat: 'market', title: 'Market Upswing', weight: 5, expires: 1, minStage: 'seed',
     text: () => 'Budgets loosened across the sector. Everything is a little easier for a while.',
     choices: [{ id: 'ok', label: 'Make the most of it', desc: '+25% market size for three weeks.',
       apply: (c) => { c.api.boost('boom', { marketSize: 0.25 }, 21); c.api.note('Ride it.'); } }],
     auto: 'ok'
   },
   {
-    id: 'market_slowdown', title: 'Market Slowdown', weight: 5, expires: 2, minStage: 'seed',
+    id: 'market_slowdown', cat: 'market', title: 'Market Slowdown', weight: 5, expires: 2, minStage: 'seed',
     text: () => 'Procurement froze across half your pipeline. Everyone is "revisiting next quarter".',
     choices: [
       { id: 'cut', label: 'Cut marketing spend', desc: 'Halve marketing budget for two weeks, preserve cash.',
@@ -169,7 +169,7 @@ export const EVENTS = [
     auto: 'cut'
   },
   {
-    id: 'cloud_bill', title: 'Surprise Cloud Bill', weight: 7, expires: 2, minStage: 'seed',
+    id: 'cloud_bill', cat: 'money', title: 'Surprise Cloud Bill', weight: 7, expires: 2, minStage: 'seed',
     cond: (s) => s.infra.load > 8,
     text: () => 'A misconfigured job ran all month. The invoice reflects that.',
     choices: [
@@ -181,7 +181,7 @@ export const EVENTS = [
     auto: 'pay'
   },
   {
-    id: 'patent_demand', title: 'Patent Demand Letter', weight: 4, expires: 3, minStage: 'growing',
+    id: 'patent_demand', cat: 'legal', title: 'Patent Demand Letter', weight: 4, expires: 3, minStage: 'growing',
     text: () => 'A company that makes nothing believes you owe them something.',
     choices: [
       { id: 'settle', label: 'Settle', cost: (s) => Math.max(25000, s.stats.revenueDay * 10), desc: 'Make it go away.',
@@ -193,7 +193,7 @@ export const EVENTS = [
     auto: 'settle'
   },
   {
-    id: 'critical_bug', title: 'Critical Bug', weight: 9, expires: 2, minStage: 'tiny',
+    id: 'critical_bug', cat: 'product', title: 'Critical Bug', weight: 9, expires: 2, minStage: 'tiny',
     cond: (s) => live(s).length > 0,
     text: (s) => `A data-corrupting edge case in ${(biggest(s) || {}).name || 'the product'} is confirmed reproducible.`,
     choices: [
@@ -206,7 +206,7 @@ export const EVENTS = [
     auto: 'schedule'
   },
   {
-    id: 'accelerator', title: 'Accelerator Invitation', weight: 3, expires: 4, maxStage: 'seed',
+    id: 'accelerator', cat: 'money', title: 'Accelerator Invitation', weight: 3, expires: 4, maxStage: 'seed',
     text: () => 'A well-known accelerator has a spot for you in the next batch.',
     choices: [
       { id: 'join', label: 'Join the batch', desc: '$80k and real reputation, for 8% of the company.',
@@ -216,7 +216,7 @@ export const EVENTS = [
     auto: 'decline'
   },
   {
-    id: 'renewal', title: 'Contract Renewal', weight: 7, expires: 3, minStage: 'growing',
+    id: 'renewal', cat: 'customers', title: 'Contract Renewal', weight: 7, expires: 3, minStage: 'growing',
     cond: (s) => s.contracts.length > 0,
     text: () => 'Your largest contract is up. Their procurement team has discovered leverage.',
     choices: [
@@ -229,7 +229,7 @@ export const EVENTS = [
     auto: 'discount'
   },
   {
-    id: 'referral', title: 'Team Referral', weight: 8, expires: 3, minStage: 'tiny',
+    id: 'referral', cat: 'people', title: 'Team Referral', weight: 8, expires: 3, minStage: 'tiny',
     cond: (s) => s.employees.length > 1,
     text: () => 'Someone on the team vouches hard for a former colleague.',
     choices: [
@@ -240,7 +240,7 @@ export const EVENTS = [
     auto: 'accept'
   },
   {
-    id: 'acquisition_offer', title: 'Acquisition Offer', weight: 5, expires: 5, minStage: 'scaleup',
+    id: 'acquisition_offer', cat: 'money', title: 'Acquisition Offer', weight: 5, expires: 5, minStage: 'scaleup',
     text: () => 'A strategic buyer has put a real number on the table.',
     choices: [
       { id: 'consider', label: 'Open the data room', desc: 'Adds a standing offer you can accept from the Company panel.',
@@ -251,7 +251,7 @@ export const EVENTS = [
   },
 // ---------------------------------------------------------------- people
   {
-    id: 'raise_request', title: 'Raise Request', weight: 8, expires: 3, minStage: 'tiny',
+    id: 'raise_request', cat: 'money', title: 'Raise Request', weight: 8, expires: 3, minStage: 'tiny',
     cond: (s) => staff(s).length > 0,
     text: (s) => `${s.pendingEventSubject || 'Someone on the team'} has done the market research on their own salary and would like to discuss it.`,
     choices: [
@@ -266,7 +266,7 @@ export const EVENTS = [
     auto: 'defer'
   },
   {
-    id: 'promotion', title: 'Promotion Case', weight: 7, expires: 3, minStage: 'growing',
+    id: 'promotion', cat: 'people', title: 'Promotion Case', weight: 7, expires: 3, minStage: 'growing',
     cond: (s) => staff(s).length >= 5,
     text: (s) => `${s.pendingEventSubject || 'One of your seniors'} has been doing the next job up for two quarters without the title.`,
     choices: [
@@ -279,7 +279,7 @@ export const EVENTS = [
     auto: 'scope'
   },
   {
-    id: 'dept_transfer', title: 'Transfer Request', weight: 6, expires: 3, minStage: 'growing',
+    id: 'dept_transfer', cat: 'people', title: 'Transfer Request', weight: 6, expires: 3, minStage: 'growing',
     cond: (s) => hasManager(s) && staff(s).length >= 6,
     text: (s) => `${s.pendingEventSubject || 'One of your team'} wants to move to a different department.`,
     choices: [
@@ -291,7 +291,7 @@ export const EVENTS = [
     auto: 'approve'
   },
   {
-    id: 'manager_conflict', title: 'Management Friction', weight: 6, expires: 3, minStage: 'growing',
+    id: 'manager_conflict', cat: 'people', title: 'Management Friction', weight: 6, expires: 3, minStage: 'growing',
     cond: (s) => hasManager(s) && staff(s).length >= 6,
     text: () => 'Two of your managers have been running the same project in two different directions.',
     choices: [
@@ -304,7 +304,7 @@ export const EVENTS = [
     auto: 'mediate'
   },
   {
-    id: 'feature_request', title: 'Customers Want One Thing', weight: 8, expires: 3, minStage: 'seed',
+    id: 'feature_request', cat: 'product', title: 'Customers Want One Thing', weight: 8, expires: 3, minStage: 'seed',
     cond: (s) => live(s).length > 0,
     text: () => 'The same feature request has now arrived from a third of your accounts.',
     choices: [
@@ -316,7 +316,7 @@ export const EVENTS = [
     auto: 'roadmap'
   },
   {
-    id: 'launch_delay', title: 'The Date Is Slipping', weight: 8, expires: 2, minStage: 'tiny',
+    id: 'launch_delay', cat: 'product', title: 'The Date Is Slipping', weight: 8, expires: 2, minStage: 'tiny',
     cond: (s) => building(s).length > 0,
     text: () => 'The launch date was picked optimistically and the build disagrees.',
     choices: [
@@ -328,7 +328,7 @@ export const EVENTS = [
     auto: 'slip'
   },
   {
-    id: 'copycat', title: 'They Copied The Feature', weight: 7, expires: 3, minStage: 'growing',
+    id: 'copycat', cat: 'product', title: 'They Copied The Feature', weight: 7, expires: 3, minStage: 'growing',
     cond: (s) => live(s).length > 0,
     text: (s) => `${s.pendingEventSubject || 'A rival'} shipped your best feature, badly, with a better landing page.`,
     choices: [
@@ -343,7 +343,7 @@ export const EVENTS = [
     auto: 'shrug'
   },
   {
-    id: 'churn_risk', title: 'A Big Account Is Wobbling', weight: 8, expires: 3, minStage: 'growing',
+    id: 'churn_risk', cat: 'customers', title: 'A Big Account Is Wobbling', weight: 8, expires: 3, minStage: 'growing',
     cond: (s) => s.contracts.length > 0,
     text: () => 'Your largest customer has stopped answering, and their usage chart is pointing down.',
     choices: [
@@ -358,7 +358,7 @@ export const EVENTS = [
     auto: 'credits'
   },
   {
-    id: 'referral_surge', title: 'Referrals Are Compounding', weight: 6, expires: 2, minStage: 'seed',
+    id: 'referral_surge', cat: 'market', title: 'Referrals Are Compounding', weight: 6, expires: 2, minStage: 'seed',
     cond: (s) => live(s).length > 0,
     text: () => 'Existing customers are bringing in new ones faster than your ads are.',
     choices: [
@@ -371,7 +371,7 @@ export const EVENTS = [
     auto: 'thanks'
   },
   {
-    id: 'support_backlog', title: 'The Queue Is Not Moving', weight: 7, expires: 2.5, minStage: 'seed',
+    id: 'support_backlog', cat: 'customers', title: 'The Queue Is Not Moving', weight: 7, expires: 2.5, minStage: 'seed',
     cond: (s) => s.stats.customers > 40,
     text: () => 'The support queue has been growing for a week and first-response time shows it.',
     choices: [
@@ -386,7 +386,7 @@ export const EVENTS = [
     auto: 'deflect'
   },
   {
-    id: 'account_expansion', title: 'A Small Account Got Big', weight: 6, expires: 3, minStage: 'growing',
+    id: 'account_expansion', cat: 'customers', title: 'A Small Account Got Big', weight: 6, expires: 3, minStage: 'growing',
     cond: (s) => s.contracts.length > 0,
     text: () => 'A customer you barely noticed has quietly grown into one of your largest users.',
     choices: [
@@ -400,7 +400,7 @@ export const EVENTS = [
     auto: 'leave'
   },
   {
-    id: 'bridge_round', title: 'Bridge Offer', weight: 6, expires: 3, minStage: 'seed',
+    id: 'bridge_round', cat: 'money', title: 'Bridge Offer', weight: 6, expires: 3, minStage: 'seed',
     cond: (s) => runwayDays(s) < 120 && s.funding.offers.length === 0,
     text: () => 'An existing backer will bridge you to the next round, on bridge terms.',
     choices: [
@@ -412,7 +412,7 @@ export const EVENTS = [
     auto: 'cut'
   },
   {
-    id: 'term_sheet', title: 'A Clean Term Sheet', weight: 6, expires: 4, minStage: 'growing',
+    id: 'term_sheet', cat: 'money', title: 'A Clean Term Sheet', weight: 6, expires: 4, minStage: 'growing',
     cond: (s) => s.funding.offers.length === 0,
     text: () => 'A fund you actually like has sent a term sheet with no unusual clauses in it.',
     choices: [
@@ -425,7 +425,7 @@ export const EVENTS = [
     auto: 'pass'
   },
   {
-    id: 'strategic_investor', title: 'Strategic Investor', weight: 5, expires: 4, minStage: 'scaleup',
+    id: 'strategic_investor', cat: 'money', title: 'Strategic Investor', weight: 5, expires: 4, minStage: 'scaleup',
     text: () => 'A large company in an adjacent market wants to invest, and to be told about your roadmap.',
     choices: [
       { id: 'take', label: 'Take the strategic money', desc: 'Cash and distribution, for 8% and less independence.',
@@ -438,7 +438,7 @@ export const EVENTS = [
     auto: 'decline'
   },
   {
-    id: 'competitor_layoffs', title: 'Rival Layoffs', weight: 6, expires: 3, minStage: 'growing',
+    id: 'competitor_layoffs', cat: 'market', title: 'Rival Layoffs', weight: 6, expires: 3, minStage: 'growing',
     text: (s) => `${s.pendingEventSubject || 'A rival'} just cut a third of their staff, and the list is circulating.`,
     choices: [
       { id: 'recruit', label: 'Call their best people', cost: (s) => Math.max(6000, s.stats.payrollDay * 2),
@@ -452,7 +452,7 @@ export const EVENTS = [
     auto: 'nothing'
   },
   {
-    id: 'competitor_price_cut', title: 'Rival Price Cut', weight: 7, expires: 3, minStage: 'seed',
+    id: 'competitor_price_cut', cat: 'market', title: 'Rival Price Cut', weight: 7, expires: 3, minStage: 'seed',
     cond: (s) => live(s).length > 0,
     text: (s) => `${s.pendingEventSubject || 'A rival'} has cut their price by a third and is emailing your customers about it.`,
     choices: [
@@ -464,7 +464,7 @@ export const EVENTS = [
     auto: 'value'
   },
   {
-    id: 'competitor_acquired', title: 'Rival Gets Acquired', weight: 5, expires: 3, minStage: 'scaleup',
+    id: 'competitor_acquired', cat: 'market', title: 'Rival Gets Acquired', weight: 5, expires: 3, minStage: 'scaleup',
     text: (s) => `${s.pendingEventSubject || 'A rival'} has been bought. Their customers are reading the integration FAQ with suspicion.`,
     choices: [
       { id: 'migrate', label: 'Fund a migration offer', cost: (s) => Math.max(20000, s.stats.revenueDay * 4),
@@ -476,7 +476,7 @@ export const EVENTS = [
     auto: 'hire'
   },
   {
-    id: 'ai_demand', title: 'AI Demand Boom', weight: 6, expires: 2, minStage: 'seed',
+    id: 'ai_demand', cat: 'product', title: 'AI Demand Boom', weight: 6, expires: 2, minStage: 'seed',
     text: () => 'Every buyer in your category suddenly has budget, provided the word "AI" appears somewhere.',
     choices: [
       { id: 'build', label: 'Ship something real', desc: 'Queues AI work; slower, durable.',
@@ -490,7 +490,7 @@ export const EVENTS = [
     auto: 'ignore'
   },
   {
-    id: 'security_scare', title: 'Industry Security Scare', weight: 6, expires: 3, minStage: 'growing',
+    id: 'security_scare', cat: 'infra', title: 'Industry Security Scare', weight: 6, expires: 3, minStage: 'growing',
     text: () => 'A company like yours was breached badly, and now every customer wants your security posture in writing.',
     choices: [
       { id: 'audit', label: 'Commission a real audit', cost: (s) => Math.max(15000, s.stats.revenueDay * 4),
@@ -504,7 +504,7 @@ export const EVENTS = [
     auto: 'harden'
   },
   {
-    id: 'policy_shift', title: 'Platform Policy Change', weight: 5, expires: 3, minStage: 'major',
+    id: 'policy_shift', cat: 'legal', title: 'Platform Policy Change', weight: 5, expires: 3, minStage: 'major',
     text: () => 'A platform you depend on has rewritten the rules, and a regulator is taking an interest in the category.',
     choices: [
       { id: 'comply', label: 'Comply early and loudly', cost: (s) => Math.max(40000, s.stats.revenueDay * 6),
@@ -518,7 +518,7 @@ export const EVENTS = [
 
   // -------------------------------------------------------------- office
   {
-    id: 'rent_increase', title: 'The Landlord Called', weight: 6, expires: 3, minStage: 'seed',
+    id: 'rent_increase', cat: 'legal', title: 'The Landlord Called', weight: 6, expires: 3, minStage: 'seed',
     cond: (s) => s.office.tier !== 'garage',
     text: () => 'Your lease is up for renewal and the new number is meaningfully larger.',
     choices: [
@@ -533,7 +533,7 @@ export const EVENTS = [
     auto: 'negotiate'
   },
   {
-    id: 'equipment_failure', title: 'Equipment Failure', weight: 5, expires: 2, minStage: 'tiny',
+    id: 'equipment_failure', cat: 'infra', title: 'Equipment Failure', weight: 5, expires: 2, minStage: 'tiny',
     text: () => 'Several machines have died in the same week, and they were not young.',
     choices: [
       { id: 'replace', label: 'Replace the fleet', cost: (s) => Math.max(4000, s.stats.payrollDay * 2),
@@ -545,7 +545,7 @@ export const EVENTS = [
     auto: 'patch'
   },
   {
-    id: 'amenity_request', title: 'The Team Wants Something', weight: 5, expires: 3, minStage: 'seed',
+    id: 'amenity_request', cat: 'people', title: 'The Team Wants Something', weight: 5, expires: 3, minStage: 'seed',
     cond: (s) => s.office.rooms.length > 0,
     text: () => 'There is a petition, half-joking, for a real coffee machine and somewhere to sit that is not a desk.',
     choices: [
@@ -560,7 +560,7 @@ export const EVENTS = [
 
   // ------------------------------------------------------- opportunities
   {
-    id: 'conference_invite', title: 'Conference Keynote', weight: 6, expires: 3, minStage: 'seed',
+    id: 'conference_invite', cat: 'market', title: 'Conference Keynote', weight: 6, expires: 3, minStage: 'seed',
     text: () => 'The main industry conference wants you on stage for twenty minutes.',
     choices: [
       { id: 'speak', label: 'Take the keynote', cost: (s) => Math.max(3000, s.stats.revenueDay),
@@ -574,7 +574,7 @@ export const EVENTS = [
     auto: 'skip'
   },
   {
-    id: 'partnership', title: 'Integration Partnership', weight: 6, expires: 4, minStage: 'growing',
+    id: 'partnership', cat: 'customers', title: 'Integration Partnership', weight: 6, expires: 4, minStage: 'growing',
     cond: (s) => live(s).length > 0,
     text: () => 'A larger company wants to build a deep integration, and to be first in the marketplace listing.',
     choices: [
@@ -587,7 +587,7 @@ export const EVENTS = [
     auto: 'shallow'
   },
   {
-    id: 'institutional_contract', title: 'Public Sector Tender', weight: 5, expires: 4, minStage: 'scaleup',
+    id: 'institutional_contract', cat: 'customers', title: 'Public Sector Tender', weight: 5, expires: 4, minStage: 'scaleup',
     text: () => 'A government department has opened a tender you could plausibly win, with a procurement process to match.',
     choices: [
       { id: 'bid', label: 'Bid properly', cost: (s) => Math.max(30000, s.stats.revenueDay * 5),
@@ -600,7 +600,7 @@ export const EVENTS = [
     auto: 'skip'
   },
   {
-    id: 'creator_endorsement', title: 'A Creator Likes You', weight: 6, expires: 2.5, minStage: 'tiny',
+    id: 'creator_endorsement', cat: 'market', title: 'A Creator Likes You', weight: 6, expires: 2.5, minStage: 'tiny',
     cond: (s) => consumer(s).length > 0,
     text: () => 'Someone with a large, genuinely engaged audience uses your product daily and has offered to say so.',
     choices: [
@@ -613,7 +613,7 @@ export const EVENTS = [
     auto: 'gift'
   },
   {
-    id: 'acquisition_target', title: 'Something Worth Buying', weight: 5, expires: 4, minStage: 'scaleup',
+    id: 'acquisition_target', cat: 'money', title: 'Something Worth Buying', weight: 5, expires: 4, minStage: 'scaleup',
     text: () => 'A small team with a good product and no runway would rather join you than shut down.',
     choices: [
       { id: 'acquihire', label: 'Buy the team', cost: (s) => Math.max(250000, s.stats.revenueDay * 30),
@@ -627,7 +627,7 @@ export const EVENTS = [
     auto: 'pass'
   },
   {
-    id: 'ipo_prep', title: 'Bankers With A Timeline', weight: 5, expires: 5, minStage: 'late',
+    id: 'ipo_prep', cat: 'money', title: 'Bankers With A Timeline', weight: 5, expires: 5, minStage: 'late',
     text: () => 'Two banks have independently suggested that the window is open and you should be ready for it.',
     choices: [
       { id: 'prepare', label: 'Start the preparation', cost: (s) => Math.max(2e6, s.stats.revenueDay * 20),
@@ -639,7 +639,7 @@ export const EVENTS = [
     auto: 'later'
   },
   {
-    id: 'international', title: 'International Expansion', weight: 5, expires: 4, minStage: 'major',
+    id: 'international', cat: 'market', title: 'International Expansion', weight: 5, expires: 4, minStage: 'major',
     text: () => 'Two regions are signing up despite having no localisation, no local billing and no support hours.',
     choices: [
       { id: 'invest', label: 'Open a real regional presence', cost: (s) => Math.max(800000, s.stats.revenueDay * 15),

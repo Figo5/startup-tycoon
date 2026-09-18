@@ -8,8 +8,37 @@ import { makeCandidate, refreshCandidates } from './state.js';
 import { addContract } from './economy.js';
 import { removeEmployee, marketSalary } from './workforce.js';
 import { startOutage } from './infra.js';
+import { diluteFounder } from './equity.js';
 
-const MIN_GAP = [3, 7];   // game days between events
+/**
+ * Stage-aware event cadence. A solo founder is left alone to learn the game;
+ * a larger company generates more decisions per day because there is more of it
+ * to go wrong. `damp` is how hard an event the player has already seen is
+ * suppressed, so late runs stay varied instead of looping three favourites.
+ */
+const CADENCE = {
+  solo: { gap: [4.2, 7.0], cap: 2, damp: 0.50 },
+  tiny: { gap: [3.6, 6.2], cap: 2, damp: 0.55 },
+  seed: { gap: [3.1, 5.2], cap: 3, damp: 0.60 },
+  growing: { gap: [2.7, 4.5], cap: 3, damp: 0.72 },
+  scaleup: { gap: [2.5, 4.1], cap: 3, damp: 0.88 },
+  major: { gap: [2.2, 3.6], cap: 4, damp: 1.00 },
+  late: { gap: [2.0, 3.3], cap: 4, damp: 1.15 }
+};
+/** Hard ceiling on unresolved events, whatever the cadence says. */
+export const MAX_UNRESOLVED = 4;
+/** Categories the later stages weight differently: bigger, less personal. */
+const CAT_STAGE_MUL = {
+  scaleup: { money: 1.20, legal: 1.20, people: 0.85 },
+  major: { money: 1.30, legal: 1.30, market: 1.15, people: 0.75 },
+  late: { money: 1.35, legal: 1.35, market: 1.20, people: 0.70 }
+};
+const RECENT_CATS = 3;
+
+export function cadenceFor(state) {
+  const base = CADENCE[state.company.stage] || CADENCE.tiny;
+  return { ...base, catMul: CAT_STAGE_MUL[state.company.stage] || {} };
+}
 
 export function eligibleEvents(state) {
   const order = stageOrder(state.company.stage);
@@ -46,7 +75,32 @@ export function spawnEvent(state, eventId) {
   };
   state.events.pending.push(pending);
   state.events.seen[eventId] = (state.events.seen[eventId] || 0) + 1;
+  state.events.lastEventId = eventId;
+  const cats = state.events.recentCats;
+  if (Array.isArray(cats)) {
+    cats.push(def.cat || 'other');
+    if (cats.length > RECENT_CATS) cats.splice(0, cats.length - RECENT_CATS);
+  }
   return pending;
+}
+
+/**
+ * Weighted draw. Three dampers, in order of how badly they ruined a run:
+ * an immediate repeat of the last event, repeats of anything seen before, and a
+ * category that has just fired (so the inbox does not become three variations
+ * of the same problem).
+ */
+export function pickEvent(state, cadence) {
+  const cats = Array.isArray(state.events.recentCats) ? state.events.recentCats : [];
+  const catCount = (cat) => cats.filter((c) => c === cat).length;
+  const pool = eligibleEvents(state).filter((e) => e.id !== state.events.lastEventId);
+  return weighted(state.rng, pool, (e) => {
+    const seen = state.events.seen[e.id] || 0;
+    const repeat = 1 / (1 + seen * 0.6 * cadence.damp);
+    const cat = 1 / (1 + catCount(e.cat || 'other') * 0.9);
+    const stageMul = cadence.catMul?.[e.cat] ?? 1;
+    return (e.weight || 1) * repeat * cat * stageMul;
+  });
 }
 
 export function eventText(state, pending) {
@@ -84,16 +138,18 @@ export function resolveEvent(state, mods, pendingId, choiceId, log, extra = {}) 
 }
 
 export function tickEvents(state, mods, days, log) {
+  const cadence = cadenceFor(state);
   state.events.cooldown -= days;
-  if (state.events.cooldown <= 0 && state.events.pending.length < 3) {
-    const pool = eligibleEvents(state);
-    // Repeats are damped so the inbox does not loop the same three events.
-    const chosen = weighted(state.rng, pool, (e) => (e.weight || 1) / (1 + (state.events.seen[e.id] || 0) * 0.6));
+  // Never bank a backlog: without this floor, a full inbox quietly accrues
+  // negative cooldown and then empties itself all at once.
+  if (state.events.cooldown < 0) state.events.cooldown = 0;
+  if (state.events.cooldown <= 0 && state.events.pending.length < Math.min(cadence.cap, MAX_UNRESOLVED)) {
+    const chosen = pickEvent(state, cadence);
     if (chosen) {
       spawnEvent(state, chosen.id);
       log?.(`Event: ${chosen.title}`, 'event');
     }
-    state.events.cooldown = range(state.rng, MIN_GAP[0], MIN_GAP[1]);
+    state.events.cooldown = range(state.rng, cadence.gap[0], cadence.gap[1]);
   }
   // Unattended events resolve to the conservative default.
   for (const p of state.events.pending.slice()) {
@@ -180,7 +236,8 @@ function makeApi(state, mods, log, pending, extra) {
       for (const c of state.competitors) for (const mk of c.markets) c.shares[mk] = clamp((c.shares[mk] || 0) - v, 0, 0.6);
     },
     halveMarketing: () => { state.company.marketingBudget = Math.round(state.company.marketingBudget * 0.5); },
-    dilute: (pct) => { state.company.founderEquity *= (1 - pct); }
+    // Ownership always moves through the one transaction path.
+    dilute: (pct, source = 'event') => diluteFounder(state, pct, source)
   };
 }
 
