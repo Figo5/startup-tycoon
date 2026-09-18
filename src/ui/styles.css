@@ -74,6 +74,9 @@ main { display: grid; grid-template-columns: 1fr 320px; min-height: 0; position:
 #feed li.good .tag, #feed li.good { color: var(--good); }
 #feed li.bad .tag, #feed li.bad { color: var(--bad); }
 #feed li.stage { color: var(--accent); font-weight: 700; }
+#feed li.goal { color: var(--accent); font-weight: 700; }
+#feed li.goal .tag, #feed li.event { color: var(--info); }
+#feed li.event .tag { color: var(--info); }
 
 /* ---------- tabs ---------- */
 #tabs {

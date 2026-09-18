@@ -1,4 +1,4 @@
-import { money, abbrev, pct, fmtDuration, clamp } from '../sim/util.js';
+import { money, abbrev, pct, fmtDuration, clamp, uid } from '../sim/util.js';
 import { stageById } from '../data/stages.js';
 import { eventById } from '../data/events.js';
 import { PANELS, PANEL_TITLES, employeeCard, prestige } from './panels.js';
@@ -13,9 +13,23 @@ import { setCapacity, computeLoad } from '../sim/infra.js';
 import { performExit } from '../sim/prestige.js';
 import { buyPrestige } from '../sim/prestige.js';
 import { addBoost } from '../sim/modifiers.js';
+import { startRoadmap, cancelRoadmap, ensureRoadmap } from '../sim/roadmap.js';
+import { hireAdvisor, dismissAdvisor } from '../sim/advisors.js';
+import { acquireCompany } from '../sim/acquisitions.js';
+import { acceptGoal, abandonGoal } from '../sim/goals.js';
 import { playMinigame, MINIGAMES } from '../minigames/index.js';
 
 const $ = (sel) => document.querySelector(sel);
+
+/** Panels in keyboard order: 1-9 then 0. */
+export const PANEL_ORDER = ['company', 'products', 'employees', 'departments', 'research',
+  'finance', 'office', 'competitors', 'advisors', 'goals'];
+
+// A purchase is refused if the same control is triggered again inside this
+// window. A double click is one interaction; it must buy one level.
+const REPEAT_GUARD_MS = 450;
+const PURCHASE_ACTIONS = new Set(['buy-prestige', 'room', 'office', 'new-product', 'research',
+  'raise', 'acquire', 'acquire-company', 'advisor-hire', 'roadmap-start', 'hire']);
 
 export function createUI(app) {
   const els = {
@@ -34,7 +48,7 @@ export function createUI(app) {
   function pushFeed(text, kind = 'info') {
     const li = document.createElement('li');
     li.className = kind;
-    li.innerHTML = `<span class="tag">${kind === 'good' ? '+' : kind === 'bad' ? '!' : kind === 'stage' ? '★' : '·'}</span><span>${escapeHtml(text)}</span>`;
+    li.innerHTML = `<span class="tag">${kind === 'good' ? '+' : kind === 'bad' ? '!' : kind === 'stage' || kind === 'goal' ? '★' : kind === 'event' ? '◆' : '·'}</span><span>${escapeHtml(text)}</span>`;
     els.feed.prepend(li);
     while (els.feed.children.length > 80) els.feed.lastChild.remove();
   }
@@ -62,6 +76,12 @@ export function createUI(app) {
       `<div class="stat"><dt>${k}</dt><dd class="${cls}">${v}</dd></div>`).join('');
     els.pause.textContent = s.time.paused ? 'Resume' : 'Pause';
     els.pause.setAttribute('aria-pressed', String(s.time.paused));
+    if (s.exitResult) {
+      els.pause.disabled = true;
+      els.stage.textContent = 'Run ended';
+    } else {
+      els.pause.disabled = false;
+    }
   }
 
   // ------------------------------------------------------------ events
@@ -137,9 +157,24 @@ export function createUI(app) {
   function hideOverlay() { els.overlay.hidden = true; els.overlayCard.innerHTML = ''; }
 
   // ----------------------------------------------------------- actions
+  const lastAt = new Map();
+  /** True when this control fired again too soon to be a fresh decision. */
+  function isRepeat(key) {
+    const now = Date.now();
+    const prev = lastAt.get(key) || 0;
+    lastAt.set(key, now);
+    return now - prev < REPEAT_GUARD_MS;
+  }
+
   async function dispatch(act, id, el) {
     const s = app.state;
     const mods = app.mods;
+    // One interaction, one transaction: a second trigger of the same purchase
+    // inside the guard window does nothing at all.
+    if (PURCHASE_ACTIONS.has(act) && isRepeat(`${act}:${id}`)) {
+      app.notify('Already in progress.', 'bad');
+      return;
+    }
     const done = (r, okMsg) => {
       if (r && r.ok === false) app.notify(r.reason || 'That did not work.', 'bad');
       else if (okMsg) app.notify(okMsg, 'good');
@@ -154,6 +189,7 @@ export function createUI(app) {
         const pending = s.events.pending.find((p) => p.id === pid);
         const def = pending && eventById(pending.eventId);
         const choice = def?.choices.find((c) => c.id === cid);
+        if (!pending || !choice) { done({ ok: false, reason: 'That event has already been resolved.' }); break; }
         if (choice?.minigame) {
           const score = await runMinigame(choice.minigame);
           applyMinigameReward(s, mods, choice.minigame, score, pending);
@@ -204,9 +240,52 @@ export function createUI(app) {
       case 'office': done(upgradeOffice(s), 'New office. Everyone is moving desks.'); break;
       case 'room': done(buyRoom(s, id), 'Built.'); break;
       case 'acquire': done(acquire(s, mods, id), 'Acquisition complete.'); break;
+      case 'acquire-company': {
+        const r = acquireCompany(s, mods, id);
+        done(r, r.ok ? `Bought ${r.target.name}. ${r.hires} people joined, integration has started.` : null);
+        break;
+      }
+      case 'roadmap-start': {
+        const [pid, iid] = id.split('|');
+        const r = startRoadmap(s, mods, pid, iid);
+        done(r, r.ok ? `Roadmap set: ${r.initiative.name}.` : null);
+        break;
+      }
+      case 'roadmap-cancel': done(cancelRoadmap(s, id)); break;
+      case 'roadmap-auto': {
+        const p = s.products.find((x) => x.id === id);
+        if (!p) { done({ ok: false, reason: 'Unknown product.' }); break; }
+        const rm = ensureRoadmap(p);
+        rm.auto = !rm.auto;
+        done(null, rm.auto
+          ? 'Your engineering manager will plan conservative initiatives.'
+          : 'You are planning this roadmap yourself.');
+        break;
+      }
+      case 'advisor-hire': {
+        const r = hireAdvisor(s, id);
+        done(r, r.ok ? `${r.advisor.name} is retained.` : null);
+        break;
+      }
+      case 'advisor-dismiss': done(dismissAdvisor(s, id)); break;
+      case 'goal-accept': {
+        const r = acceptGoal(s, id);
+        done(r, r.ok ? `Goal accepted: ${r.goal.name}.` : null);
+        break;
+      }
+      case 'goal-abandon': done(abandonGoal(s)); break;
       case 'open-prestige': showOverlay(prestige(ctx())); break;
-      case 'buy-prestige': { const r = buyPrestige(s.meta, id); showOverlay(prestige(ctx())); done(r); break; }
+      case 'buy-prestige': {
+        // Every purchase carries a transaction id. Two clicks on the same
+        // rendered control share it, so the second cannot buy a second level.
+        const txId = el.dataset.txid || (el.dataset.txid = uid('tx'));
+        const r = buyPrestige(s.meta, id, { txId });
+        showOverlay(prestige(ctx()));
+        done(r, r.ok ? `${id.replace(/_/g, ' ')} is now level ${r.level}.` : null);
+        break;
+      }
       case 'exit': app.onExit(id); break;
+      case 'exit-summary': app.showExitSummary(); break;
       case 'save-now': app.save(); app.notify('Saved.', 'good'); break;
       case 'export': app.exportSave(); break;
       case 'import': app.importSave(); break;
@@ -256,9 +335,8 @@ export function createUI(app) {
     if (e.target.matches('input, select, textarea')) return;
     if (e.key === 'Escape') { if (!els.overlay.hidden) hideOverlay(); else hidePanel(); }
     if (e.code === 'Space' && els.overlay.hidden) { e.preventDefault(); app.togglePause(); }
-    const order = ['company', 'products', 'employees', 'departments', 'research', 'finance', 'office', 'competitors'];
-    const n = Number(e.key);
-    if (n >= 1 && n <= order.length && els.overlay.hidden) showPanel(order[n - 1]);
+    const n = e.key === '0' ? 10 : Number(e.key);
+    if (n >= 1 && n <= PANEL_ORDER.length && els.overlay.hidden) showPanel(PANEL_ORDER[n - 1]);
     if (e.key === '?') app.showHelp();
   });
 

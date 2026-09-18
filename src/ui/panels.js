@@ -18,6 +18,12 @@ import { officeOptions, roomOptions } from '../sim/office.js';
 import { acquisitionTargets, marketShares } from '../sim/competitors.js';
 import { effectiveCapacity, UNIT_COST_DAY } from '../sim/infra.js';
 import { has } from '../sim/modifiers.js';
+import { roadmapChoices, roadmapProgress, ensureRoadmap, activeInitiatives, initiativeEffort, INITIATIVE_COMMIT, initiativeBudget, initiativesUsed } from '../sim/roadmap.js';
+import { ROADMAP_CATEGORIES } from '../data/roadmaps.js';
+import { advisorOffers, advisorSlots, ensureAdvisors } from '../sim/advisors.js';
+import { acquisitionOffers, integrationActive } from '../sim/acquisitions.js';
+import { goalsSummary, goalProgress } from '../sim/goals.js';
+import { GOALS as GOAL_DEFS } from '../data/goals.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const bar = (v, cls = '', label = '') =>
@@ -25,9 +31,37 @@ const bar = (v, cls = '', label = '') =>
 const btn = (act, label, { id = '', cls = 'btn', disabled = false, title = '' } = {}) =>
   `<button class="${cls}" data-act="${act}"${id ? ` data-id="${esc(id)}"` : ''}${disabled ? ' disabled' : ''}${title ? ` title="${esc(title)}"` : ''}>${esc(label)}</button>`;
 
+// Effect keys that are percentages of something vs. absolute points, so the
+// cards describe what the simulation will actually read.
+const ABS_EFFECTS = new Set(['techDebt', 'quality', 'reliability', 'security', 'enterpriseReady',
+  'marketBonus', 'infraEff', 'supportLoadMod', 'hireQuality', 'candidateSlots', 'deskBonus', 'capacity']);
+const EFFECT_LABELS = {
+  acqMul: 'user acquisition', revMul: 'revenue per customer', churnMul: 'churn', convMul: 'conversion',
+  marketBonus: 'market size', infraEff: 'infrastructure efficiency', supportLoadMod: 'support load',
+  enterpriseReady: 'enterprise readiness', quality: 'quality', reliability: 'reliability',
+  security: 'security', techDebt: 'technical debt',
+  devSpeed: 'shipping speed', debtRate: 'debt accumulation', payroll: 'payroll', infraCost: 'infrastructure cost',
+  marketSize: 'market size', conversion: 'conversion', enterpriseConv: 'enterprise conversion',
+  contractSize: 'contract size', sales: 'sales output', marketing: 'marketing output', support: 'support output',
+  churn: 'churn', researchSpeed: 'research speed', outageRisk: 'outage risk', outageDuration: 'outage length',
+  staffChurn: 'staff attrition', hireQuality: 'candidate quality', candidateRefresh: 'candidate throughput',
+  projectQuality: 'project outcomes', fundingValuation: 'investor valuations', valuation: 'valuation',
+  reputationGain: 'reputation growth', capacityPerUnit: 'capacity per unit', managerBonus: 'manager effect',
+  deptBonus: 'department effect', moraleGain: 'morale', candidateSlots: 'candidate slots'
+};
+
+function effectChip(k, v) {
+  const shown = ABS_EFFECTS.has(k) ? `${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}` : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
+  const good = k === 'techDebt' || k === 'churn' || k === 'churnMul' || k === 'payroll' || k === 'infraCost' || k === 'outageRisk' || k === 'staffChurn' || k === 'supportLoadMod' ? v < 0 : v > 0;
+  return `<span class="tag" style="color:var(--${good ? 'good' : 'bad'});border-color:var(--${good ? 'good' : 'bad'})">${esc(shown)} ${esc(EFFECT_LABELS[k] || k)}</span>`;
+}
+const effectRow = (effects = {}) => Object.entries(effects)
+  .map(([k, v]) => effectChip(k, v)).join(' ');
+
 export const PANEL_TITLES = {
   company: 'Company', products: 'Products', employees: 'Employees', departments: 'Departments',
-  research: 'Research', finance: 'Finance', office: 'Office', competitors: 'Competitors'
+  research: 'Research', finance: 'Finance', office: 'Office', competitors: 'Competitors',
+  advisors: 'Advisors', goals: 'Company goals'
 };
 
 // ---------------------------------------------------------------- Company
@@ -37,6 +71,8 @@ export function company(ctx) {
   const prog = stageProgress(state);
   const exits = exitPreview(state, mods);
   const meta = state.meta;
+  const ended = state.exitResult;
+  const goalState = goalsSummary(state);
 
   const stageList = STAGES.map((s) => {
     const done = stageOrder(c.stage) >= s.order;
@@ -55,9 +91,21 @@ export function company(ctx) {
         ${bar(p.pct, p.pct >= 1 ? 'good' : '', `${labelFor(p.key)} progress`)}`).join('')}
     </div>` : '<div class="tile"><h3>Late Stage</h3><p>There is nothing left to grow into. Time to decide how this ends.</p></div>';
 
-  const exitHtml = exits.some((e) => e.available) ? `
+  const exitHtml = ended ? `
+    <h3>This run has ended</h3>
+    <div class="tile">
+      <h3>${esc(ended.name)}<span class="tag">${ended.rep} FR</span></h3>
+      <div class="spread small"><span>Company value</span><b>${money(ended.value)}</b></div>
+      <div class="spread small"><span>Your stake at exit</span><b>${pct(ended.equity, 1)}</b></div>
+      <div class="spread small"><span>Proceeds</span><b>${money(ended.proceeds)}</b></div>
+      <p class="muted small">The stake was sold on day ${Math.floor(ended.day)}. There is nothing left to sell, so no
+      exit can be taken twice. Founder Reputation is already banked.</p>
+      ${btn('exit-summary', 'Review the summary and start the next company', { cls: 'btn' })}
+    </div>
+    <hr />` : exits.some((e) => e.available) ? `
     <h3>Exit</h3>
-    <p class="muted small">Ending the run converts your stake into Founder Reputation, which is permanent.</p>
+    <p class="muted small">Ending the run converts your stake into Founder Reputation, which is permanent.
+    An exit sells 100% of the stake you still hold, once: it cannot be taken again afterwards.</p>
     <div class="grid two">${exits.map((e) => `
       <div class="tile">
         <h3>${esc(e.name)}<span class="tag">${e.rep} FR</span></h3>
@@ -80,6 +128,13 @@ export function company(ctx) {
       </div>
       ${progressHtml}
     </div>
+    <hr />
+    ${ended ? `<p style="color:var(--accent)"><b>This run has ended.</b> Nothing is being simulated. Start the next company from the exit card below.</p>` : ''}
+    ${goalState.active ? (() => {
+      const gp = goalProgress(state, goalState.active);
+      return `<div class="spread small"><span>Active goal: ${esc(goalState.active.name)}</span><b>${fmtGoal(goalState.active, gp)}</b></div>
+      ${bar(gp.pct, gp.pct >= 1 ? 'good' : '')}`;
+    })() : '<p class="muted small">No active company goal. The Goals tab has three to choose from.</p>'}
     <hr />
     ${exitHtml}
     <h3>Company stages</h3>
@@ -107,10 +162,65 @@ const labelFor = (k) => ({ employees: 'Employees', revenueDay: 'Revenue per day'
 const fmtReq = (k, v) => (k === 'revenueDay' || k === 'valuation' ? money(v) : Math.floor(v));
 
 // --------------------------------------------------------------- Products
+function roadmapBlock(ctx, p, wf) {
+  const { state } = ctx;
+  const rm = ensureRoadmap(p);
+  if (p.stage !== 'live') {
+    return `<h3 style="margin-top:10px">Roadmap</h3>
+      <p class="muted small">Roadmap work starts once ${esc(p.name)} is live.</p>`;
+  }
+  const prog = roadmapProgress(p);
+  const auto = rm.auto;
+  const autoToggle = btn('roadmap-auto', auto ? 'Auto: on (manager picks)' : 'Auto: off (you pick)', {
+    id: p.id, cls: 'btn secondary'
+  });
+  if (prog) {
+    const def = roadmapChoices(state, p).find((c) => c.id === prog.id);
+    const running = activeInitiatives(state).length || 1;
+    const perDay = initiativeEffort(state, ctx.mods, wf) / running;
+    const eta = perDay > 0 ? fmtDuration(prog.remaining / perDay) : 'stalled - no product or engineering staff';
+    return `
+      <h3 style="margin-top:10px">Roadmap<span class="tag">${esc(def?.cat || '')}</span></h3>
+      <div class="spread small"><span>${esc(prog.name)}</span><b>${Math.round(prog.pct * 100)}%</b></div>
+      ${bar(prog.pct, 'good', 'initiative progress')}
+      <div class="small muted">About ${esc(eta)} of initiative work left · ${money(prog.runDay)}/day while it runs</div>
+      <div class="small muted">Holds back ${Math.round(INITIATIVE_COMMIT * 100)}% of engineering while it runs.</div>
+      <div class="small" style="margin-top:4px">${effectRow(def?.effects)}</div>
+      ${def?.tradeoff ? `<p class="small" style="color:var(--warn)">Tradeoff: ${esc(def.tradeoff)}</p>` : ''}
+      <div class="row">${btn('roadmap-cancel', 'Abandon (fee is not refunded)', { id: p.id, cls: 'btn secondary' })}${autoToggle}</div>`;
+  }
+
+  const choices = roadmapChoices(state, p);
+  const open = choices.filter((c) => c.available);
+  const locked = choices.filter((c) => !c.available && !c.done);
+  const shipped = rm.history.map((id) => choices.find((c) => c.id === id)).filter(Boolean);
+  const groups = ROADMAP_CATEGORIES.map((cat) => {
+    const items = open.filter((c) => c.cat === cat.id);
+    if (!items.length) return '';
+    return `<div class="small muted" style="margin-top:6px">${esc(cat.name)} — ${esc(cat.desc)}</div>
+      <div class="row">${items.map((c) => btn('roadmap-start', `${c.name} · ${money(c.cost)}`, {
+        id: `${p.id}|${c.id}`, cls: 'choice',
+        title: `${c.desc} (~${c.work} effort-days)`
+      })).join('')}</div>`;
+  }).join('');
+  return `
+    <h3 style="margin-top:10px">Roadmap<span class="tag">${initiativesUsed(state)}/${initiativeBudget(state)} used</span></h3>
+    <p class="muted small">One initiative at a time. It costs cash up front, holds back
+    ${Math.round(INITIATIVE_COMMIT * 100)}% of engineering while it runs, and pays off once when it ships.
+    A company only has capacity for a handful of initiatives per run, so the choice is the point -
+    and automating it only ever picks the safe options.</p>
+    ${groups || '<p class="muted small">No initiative is available right now.</p>'}
+    ${open.length ? `<div class="small" style="margin-top:6px">Effects on completion: ${effectRow(Object.assign({}, ...open.map((c) => c.effects)))}</div>` : ''}
+    ${shipped.length ? `<p class="small muted">Shipped: ${shipped.map((c) => esc(c.name)).join(', ')}</p>` : ''}
+    ${locked.length ? `<p class="small muted">Also on the board: ${locked.slice(0, 4).map((c) => `${esc(c.name)} (${esc(c.reason)})`).join(' · ')}</p>` : ''}
+    <div class="row">${autoToggle}</div>`;
+}
+
 export function products(ctx) {
   const { state, mods } = ctx;
   const cats = availableCategories(state, mods);
   const slots = maxProducts(state);
+  const wf = computeWorkforce(state, mods);
 
   const cards = state.products.map((p) => {
     const cat = categoryById(p.category);
@@ -144,6 +254,7 @@ export function products(ctx) {
             ${[['0.5', 'Low'], ['1', 'Normal'], ['2', 'High']].map(([v, l]) =>
               `<button class="ghost" data-act="priority" data-id="${p.id}" data-val="${v}"${String(p.priority) === v ? ' aria-current="true" style="color:var(--accent);border-color:var(--accent)"' : ''}>${l}</button>`).join('')}
           </span></div>
+        ${roadmapBlock(ctx, p, wf)}
         <h3 style="margin-top:10px">Work queue</h3>
         ${cur ? `<div class="spread small"><span>${esc(cur.name)}</span><span>${Math.round((cur.done / cur.work) * 100)}%</span></div>${bar(cur.done / cur.work)}` : '<p class="muted small">Idle. Queue something below, or hire an engineering manager to keep it busy.</p>'}
         ${p.projects.slice(1).map((q) => `<div class="small muted">queued: ${esc(q.name)}</div>`).join('')}
@@ -345,10 +456,13 @@ export function finance(ctx) {
   const lines = [
     ['Product revenue', liveProducts(state).reduce((a, p) => a + p.revenueDay, 0), 'up'],
     ['Contract revenue', state.contracts.reduce((a, c) => a + c.revenueDay, 0), 'up'],
+    ['Acquired revenue', st.acquiredDay || 0, 'up'],
     ['Payroll', -st.payrollDay, 'down'],
     ['Infrastructure', -st.infraDay, 'down'],
     ['Marketing', -st.marketingDay, 'down'],
     ['Rent', -st.rentDay, 'down'],
+    ['Advisors', -(st.advisorDay || 0), 'down'],
+    ['Roadmap work', -(st.roadmapDay || 0), 'down'],
     ['Tools & overhead', -(st.miscDay || 0), 'down']
   ];
 
@@ -457,6 +571,8 @@ export function competitors(ctx) {
   const { state, mods } = ctx;
   const canBuy = has(mods, 'acquisitions');
   const targets = acquisitionTargets(state);
+  const offers = acquisitionOffers(state);
+  const buying = integrationActive(state);
   return `
     <p class="muted small">Rivals take share out of the markets your products sell into. Beating them on revenue slowly pushes them back; buying them removes the pressure outright.</p>
     <div class="grid two">${state.competitors.map((c) => {
@@ -468,6 +584,28 @@ export function competitors(ctx) {
         ${t && canBuy ? btn('acquire', `Acquire for ${money(t.price)}`, { id: c.id, disabled: state.company.cash < t.price }) : ''}
       </div>`;
     }).join('')}</div>
+    <hr />
+    <h3>Companies for sale${buying ? '<span class="tag">integrating</span>' : ''}</h3>
+    ${offers.length ? `
+      <p class="muted small">Buying a company is not free money: you pay the asking price, take on their people and bills, and spend weeks integrating them.</p>
+      <div class="grid two">${offers.map((t) => `
+        <div class="tile">
+          <h3>${esc(t.name)}<span class="tag">${esc(t.category)}</span><span class="tag">${esc(t.difficulty || '')} integration</span></h3>
+          <p>${esc(t.blurb || '')}</p>
+          <div class="spread small"><span>Asking price</span><b>${money(t.price)}</b></div>
+          <div class="spread small"><span>Users</span><b>${abbrev(t.users || 0)}</b></div>
+          <div class="spread small"><span>Revenue added</span><b>${money(t.revenueDay)}/day</b></div>
+          <div class="spread small"><span>People</span><b>${(t.employees || []).map(([r, n]) => `${n}×${r.replace(/_/g, ' ')}`).join(', ') || 'none'}</b></div>
+          <div class="spread small"><span>Infrastructure load</span><b>+${Math.round(t.infraLoad || 0)} units</b></div>
+          <div class="spread small"><span>Integration</span><b>${Math.round(t.integrationDays || 0)} days · morale -${Math.round((t.moraleHit || 0) * 100)}%</b></div>
+          <div class="small">${effectRow(t.tech)}</div>
+          ${t.techNote ? `<p class="small muted">${esc(t.techNote)}</p>` : ''}
+          ${t.sellerReason ? `<p class="small" style="color:var(--warn)">Why they are selling: ${esc(t.sellerReason)}</p>` : ''}
+          ${btn('acquire-company', t.available ? `Buy ${t.name} for ${money(t.price)}` : (t.reason || 'Unavailable'), {
+            id: t.id, disabled: !t.available
+          })}
+        </div>`).join('')}</div>`
+      : `<p class="muted small">${has(mods, 'acquisitions') ? 'No companies are for sale right now. More appear as you grow.' : 'Companies come up for sale at the Scale-Up stage.'}</p>`}
     <hr />
     <h3>Market share</h3>
     ${[...new Set(state.products.map((p) => p.category))].map((cat) => {
@@ -481,19 +619,115 @@ export function competitors(ctx) {
 export function prestige(ctx) {
   const meta = ctx.state.meta;
   const ups = prestigeLevels(meta);
+  const ended = !!ctx.state.exitResult;
   return `
     <h2>Founder upgrades</h2>
-    <p class="muted small">Founder Reputation is permanent. It is earned by exiting a company and spent on advantages that apply to every future run.</p>
-    <div class="spread"><span>Available</span><b>${meta.founderRep} FR</b></div>
+    <p class="muted small">Founder Reputation is permanent. It is earned by exiting a company and spent on advantages that apply to every future run.
+    Each upgrade is bought one level at a time, at the price shown, and a level can never be bought twice.</p>
+    <div class="spread"><span>Available</span><b>${Math.floor(meta.founderRep)} FR</b></div>
     <hr />
     <div class="grid two">${ups.map((u) => `
-      <div class="tile">
-        <h3>${esc(u.name)}<span class="tag">${u.level}/${u.max}</span></h3>
+      <div class="tile" style="${u.maxed ? 'opacity:.7' : ''}">
+        <h3>${esc(u.name)}<span class="tag" style="${u.maxed ? 'color:var(--good);border-color:var(--good)' : ''}">${u.maxed ? 'MAX' : `${u.level}/${u.max}`}</span></h3>
         <p>${esc(u.desc)}</p>
-        ${u.maxed ? '<p class="small" style="color:var(--good)">Fully upgraded.</p>'
-          : btn('buy-prestige', `Buy for ${u.price} FR`, { id: u.id, disabled: meta.founderRep < u.price })}
+        ${u.maxed
+          ? '<p class="small" style="color:var(--good)">Fully upgraded.</p>'
+          : `<div class="spread small"><span>Next level</span><b>${u.price} FR</b></div>
+             ${btn('buy-prestige', u.affordable ? `Buy level ${u.level + 1} for ${u.price} FR` : `${u.price} FR — not enough reputation`, {
+               id: u.id, disabled: !u.affordable, cls: u.affordable ? 'btn' : 'btn secondary'
+             })}`}
       </div>`).join('')}</div>
-    <div class="row" style="margin-top:14px">${btn('close-overlay', 'Close', { cls: 'btn secondary' })}</div>`;
+    <div class="row" style="margin-top:14px">
+      ${ended ? btn('exit-summary', 'Back to the exit summary', { cls: 'btn' }) : ''}
+      ${btn('close-overlay', 'Close', { cls: 'btn secondary' })}
+    </div>`;
 }
 
-export const PANELS = { company, products, employees, departments, research, finance, office, competitors };
+// ---------------------------------------------------------------- Advisors
+export function advisors(ctx) {
+  const { state } = ctx;
+  const offers = advisorOffers(state);
+  const slots = advisorSlots(state);
+  const adm = ensureAdvisors(state);
+  const hired = offers.filter((a) => a.hired);
+  const retainer = hired.reduce((a, x) => a + x.retainerDay, 0);
+
+  return `
+    <p class="muted small">Advisors are retained, not owned. They apply for the rest of <b>this</b> company only:
+    a new run starts with an empty bench, and nothing carries them over. Slots are deliberately scarce, and each
+    advisor takes something away as well as adding something.</p>
+    <div class="spread"><span>Slots in use</span><b>${adm.hired.length} / ${slots}</b></div>
+    ${slots ? '' : '<p class="muted">Advisors become available at the Seed stage.</p>'}
+    ${hired.length ? `<hr /><h3>On staff</h3>
+      <div class="grid two">${hired.map((a) => `
+        <div class="tile">
+          <h3>${esc(a.name)}<span class="tag">${esc(a.archetype)}</span></h3>
+          <p>${esc(a.blurb)}</p>
+          <div class="small">${effectRow(a.effects)}</div>
+          <div class="spread small"><span>Retainer</span><b>${money(a.retainerDay)}/day</b></div>
+          ${btn('advisor-dismiss', 'Let them go', { id: a.id, cls: 'btn secondary' })}
+        </div>`).join('')}</div>
+      <div class="spread small"><span>Total retainer</span><b>${money(retainer)}/day</b></div>` : ''}
+    <hr />
+    <h3>Available</h3>
+    <div class="grid two">${offers.map((a) => `
+      <div class="tile" style="${a.hired ? 'opacity:.55' : ''}">
+        <h3>${esc(a.name)}<span class="tag">${esc(a.archetype)}</span></h3>
+        <p>${esc(a.blurb)}</p>
+        <div class="small">${effectRow(a.effects)}</div>
+        <div class="spread small"><span>Engagement fee</span><b>${money(a.fee)}</b></div>
+        <div class="spread small"><span>Retainer</span><b>${money(a.retainerDay)}/day</b></div>
+        <p class="small" style="color:var(--warn)">Cost: ${esc(a.tradeoff)}</p>
+        ${a.hired ? '<p class="small" style="color:var(--good)">On staff.</p>'
+          : btn('advisor-hire', a.available ? `Retain for ${money(a.fee)}` : (a.reason || 'Unavailable'), {
+            id: a.id, disabled: !a.available
+          })}
+      </div>`).join('')}</div>`;
+}
+
+// ------------------------------------------------------------------- Goals
+export function goals(ctx) {
+  const { state } = ctx;
+  const s = goalsSummary(state);
+  const card = (def, extra = '') => {
+    const p = goalProgress(state, def);
+    return `<div class="tile">
+      <h3>${esc(def.name)}<span class="tag">${def.unlock} stage</span></h3>
+      <p>${esc(def.desc)}</p>
+      <div class="spread small"><span>Progress</span><b>${fmtGoal(def, p)}</b></div>
+      ${bar(p.pct, p.pct >= 1 ? 'good' : '')}
+      <p class="small" style="color:var(--accent)">Reward: ${esc(def.rewardText)}</p>
+      ${extra}
+    </div>`;
+  };
+  return `
+    <p class="muted small">Goals give a run a direction. There is exactly one active goal at a time, nothing expires,
+    and switching is free — no streaks to break, nothing lost by closing the game for a week.</p>
+    <h3>Active goal</h3>
+    ${s.active ? card(s.active, btn('goal-abandon', 'Stop working on this', { cls: 'btn secondary' }))
+      : '<p class="muted small">Nothing active. Pick one below.</p>'}
+    <hr />
+    <h3>On offer</h3>
+    ${s.offered.filter((d) => !s.active || d.id !== s.active.id).length
+      ? `<div class="grid two">${s.offered.filter((d) => !s.active || d.id !== s.active.id)
+        .map((d) => card(d, btn('goal-accept', s.active ? 'Switch to this goal' : 'Work on this', { id: d.id }))).join('')}</div>`
+      : '<p class="muted small">No new goals are offered at this stage.</p>'}
+    ${s.completed.length ? `<hr /><h3>Completed</h3>
+      <p class="small">${s.completed.map((id) => esc(goalName(id))).join(' · ')}</p>` : ''}`;
+}
+
+function goalName(id) {
+  const def = GOAL_DEFS.find((g) => g.id === id);
+  return def ? def.name : id;
+}
+
+function fmtGoal(def, p) {
+  if (def.id === 'growth_push') return `${abbrev(p.have)} / ${abbrev(p.need)} users`;
+  if (def.id === 'lean_machine' || def.id === 'bootstrapped_success') {
+    return `${money(p.have)} / ${money(p.need)}`;
+  }
+  if (def.sustained) return `${Math.floor(p.have)} / ${p.need} days`;
+  return `${Math.floor(p.have)} / ${p.need}`;
+}
+
+export const PANELS = { company, products, employees, departments, research, finance, office, competitors, advisors, goals };

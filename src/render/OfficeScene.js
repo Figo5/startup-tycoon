@@ -154,11 +154,94 @@ export default class OfficeScene extends Phaser.Scene {
     const state = this.game$.state;
     const ids = new Set(state.employees.map((e) => e.id));
     for (const [id, a] of this.agents) {
+      if (a.advisor) continue;
       if (!ids.has(id)) { a.sprite.destroy(); a.pip.destroy(); this.agents.delete(id); }
     }
     for (const e of state.employees) {
       if (!this.agents.has(e.id)) this.spawnAgent(e);
     }
+    this.syncAdvisors();
+  }
+
+  /**
+   * Retained advisors appear in the office as visitors. Purely cosmetic: they
+   * hold no desk, run no simulation, and are driven by the same pathing as staff.
+   */
+  syncAdvisors() {
+    const state = this.game$.state;
+    const hired = state.advisors?.hired || [];
+    const want = new Set(hired.map((h) => `adv_${h.id}`));
+    for (const [id, a] of [...this.agents]) {
+      if (!a.advisor) continue;
+      if (!want.has(id)) { a.sprite.destroy(); a.pip.destroy(); this.agents.delete(id); }
+    }
+    for (const h of hired) {
+      const id = `adv_${h.id}`;
+      if (this.agents.has(id)) continue;
+      const variant = Math.abs(hash(h.id)) % 3;
+      const key = personKey('advisor', variant);
+      const start = { x: this.layout.doorX, y: this.layout.h - 2 };
+      const sprite = this.add.sprite(start.x * TILE + TILE / 2, start.y * TILE + TILE / 2, `${key}_down0`);
+      sprite.setOrigin(0.5, 0.62).setInteractive({ useHandCursor: true });
+      const pip = this.add.rectangle(sprite.x, sprite.y - 14, 4, 4, ACTIVITY_COLORS.meeting);
+      this.peopleLayer.add(sprite);
+      this.peopleLayer.add(pip);
+      this.agents.set(id, {
+        id, sprite, pip, key, gx: start.x, gy: start.y, path: [], timer: 1,
+        facing: 'down', frame: 0, anim: 0, activity: 'meeting', deskSlot: null, advisor: true
+      });
+    }
+  }
+
+  /** A short, self-destructing burst. Cosmetic only, and off under reduced motion. */
+  celebrate() {
+    if (this.reducedMotion || !this.layout) return;
+    const { w, h } = this.layout;
+    const cx = (w * TILE) / 2;
+    const cy = (h * TILE) / 2;
+    const colours = [0xf2c14e, 0x6ec07a, 0x5aa9e6];
+    for (let i = 0; i < 24; i++) {
+      const r = this.add.rectangle(
+        cx + (Math.random() - 0.5) * w * TILE * 0.5,
+        cy + (Math.random() - 0.5) * h * TILE * 0.4,
+        3, 3, colours[i % colours.length]
+      ).setDepth(60);
+      this.tweens.add({
+        targets: r, y: r.y - 22 - Math.random() * 28, alpha: 0,
+        duration: 800 + Math.random() * 500, onComplete: () => r.destroy()
+      });
+    }
+  }
+
+  /** Roadmap work pulls product and engineering people into visible huddles. */
+  roadmapActive() {
+    return (this.game$.state.products || []).some((p) => p.roadmap?.active);
+  }
+
+  chooseAdvisorDestination(agent) {
+    const layout = this.layout;
+    const room = layout.rooms.find((r) => r.id === 'exec') || layout.rooms.find((r) => r.id === 'meeting');
+    let target = null;
+    // Mostly the executive or meeting room, sometimes just walking the floor.
+    if (room && Math.random() > 0.35) {
+      const spots = [[room.x + 1, room.y + 1], [room.x + 2, room.y + 2], [room.x + 1, room.y + 3], [room.x + 2, room.y + 1]];
+      for (let i = 0; i < spots.length && !target; i++) {
+        const [x, y] = spots[Math.floor(Math.random() * spots.length)];
+        if (layout.walkable[y]?.[x]) target = { x, y };
+      }
+    }
+    if (!target) {
+      for (let i = 0; i < 12 && !target; i++) {
+        const x = 1 + Math.floor(Math.random() * (layout.w - 2));
+        const y = 1 + Math.floor(Math.random() * (layout.h - 2));
+        if (layout.walkable[y][x]) target = { x, y };
+      }
+    }
+    if (!target) target = { x: agent.gx, y: agent.gy };
+    agent.activity = 'meeting';
+    agent.pip.setFillStyle(ACTIVITY_COLORS.meeting);
+    agent.path = findPath(layout, { x: agent.gx, y: agent.gy }, target);
+    agent.timer = 5 + Math.random() * 9;
   }
 
   chooseDestination(agent, emp) {
@@ -167,6 +250,19 @@ export default class OfficeScene extends Phaser.Scene {
     const roomOf = (id) => layout.rooms.find((r) => r.id === id);
     let target = null;
     let activity = ROLE_ACTIVITY[emp.role] || 'idle';
+
+    // An active roadmap sends product and engineering people to huddle together.
+    if (this.roadmapActive() && ['product', 'engineering', 'design'].includes(emp.dept) && !this.reducedMotion && Math.random() < 0.22) {
+      const room = roomOf('meeting') || roomOf('lab') || roomOf('salesfloor');
+      if (room) {
+        target = { x: room.x + 1 + Math.floor(Math.random() * (room.w - 2)), y: room.y + 2 };
+        agent.activity = 'meeting';
+        agent.pip.setFillStyle(ACTIVITY_COLORS.meeting);
+        agent.path = findPath(layout, { x: agent.gx, y: agent.gy }, target);
+        agent.timer = 3 + Math.random() * 5;
+        return;
+      }
+    }
 
     if (this.reducedMotion) roll = 0;
     if (roll < 0.62) {
@@ -228,7 +324,7 @@ export default class OfficeScene extends Phaser.Scene {
     const empById = new Map(state.employees.map((e) => [e.id, e]));
     for (const agent of this.agents.values()) {
       const emp = empById.get(agent.id);
-      if (!emp) continue;
+      if (!emp && !agent.advisor) continue;
       if (agent.path.length) {
         const next = agent.path[0];
         const tx = next.x * TILE + TILE / 2;
@@ -256,7 +352,10 @@ export default class OfficeScene extends Phaser.Scene {
         const atDesk = agent.deskSlot && agent.gx === agent.deskSlot.x && agent.gy === agent.deskSlot.y;
         agent.sprite.setTexture(`${agent.key}_${atDesk ? 'sit' : 'down0'}`);
         if (atDesk) agent.sprite.setFlipX(false);
-        if (agent.timer <= 0) this.chooseDestination(agent, emp);
+        if (agent.timer <= 0) {
+          if (agent.advisor) this.chooseAdvisorDestination(agent);
+          else this.chooseDestination(agent, emp);
+        }
       }
       agent.pip.setPosition(agent.sprite.x, agent.sprite.y - 15);
       agent.sprite.setDepth(agent.sprite.y);

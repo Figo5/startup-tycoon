@@ -5,6 +5,7 @@ import { stageOrder } from '../data/stages.js';
 import { mul, flat, has } from './modifiers.js';
 import { prioritySplit } from './workforce.js';
 import { makeProject, makeProduct } from './state.js';
+import { acquiredSupportLoad } from './acquisitions.js';
 
 const CLASS_ORDER = ['consumer', 'smb', 'midmarket', 'enterprise'];
 const CLASS_CHURN = { consumer: 1.0, smb: 0.7, midmarket: 0.45, enterprise: 0.25 };
@@ -38,6 +39,7 @@ export function supportCoverage(state, mods, wf) {
     demand += (totalCustomers(p) / 1000) * cat.supportLoad * (1 + p.supportLoadMod);
   }
   for (const c of state.contracts) demand += c.supportLoad;
+  demand += acquiredSupportLoad(state);
   if (demand < 0.4) return 1;
   return clamp((wf.out.support || 0) / demand, 0, 1.6);
 }
@@ -61,10 +63,13 @@ export function distributeEngineering(state, mods, wf, days) {
   const engSplit = prioritySplit(state, 'engineering');    // 0 = ship, 1 = quality
   const shipMul = 1.08 - engSplit * 0.16;
   const completed = [];
+  // An active roadmap initiative is a committed slice of engineering, taken out
+  // of the queue before any product work is distributed.
+  const engOutput = wf.out.eng * (1 - clamp(mods.initiativeCommit || 0, 0, 0.8));
 
   working.forEach((p, i) => {
     const debtDrag = clamp(1 - p.techDebt * 0.35, 0.35, 1);
-    let work = wf.out.eng * (weights[i] / total) * shipMul * debtDrag * days;
+    let work = engOutput * (weights[i] / total) * shipMul * debtDrag * days;
     let guard = 0;
     while (work > 0 && p.projects.length && guard++ < 8) {
       const prj = p.projects[0];
@@ -189,7 +194,7 @@ export function tickProducts(state, mods, wf, days, log) {
     const diminish = 1 / (1 + spend / Math.max(250, cap * 0.02));
     const paid = spend * cat.marketingUsers * marketingPower * diminish;
     const sold = (wf.out.sales || 0) * cat.salesPull * share * 0.6 * (0.7 + salesSplit * 0.6);
-    const growthGain = (1 + prodPower * 0.004 * (1 - prodSplit));
+    const growthGain = (1 + prodPower * 0.004 * (1 - prodSplit)) * (1 + (p.acqMul || 0));
     const room = clamp(1 - p.users / cap, -0.5, 1);
     let gain = (organic * p.users * room + (paid + sold) * Math.max(0.05, room)) * growthGain;
     if (outage) gain *= 0.2;
@@ -202,6 +207,7 @@ export function tickProducts(state, mods, wf, days, log) {
       * (1 + (1 - p.reliability * state.infra.reliability) * 1.2)
       * (1 - covBonus * 0.5)
       * (1 - prodSplit * 0.18)
+      * (1 + (p.churnMul || 0))
       * mul(mods, 'churn');
     if (coverage < 1) churnRate *= 1 + (1 - coverage) * 0.3;
     if (outage) churnRate *= 2.5;
@@ -214,7 +220,7 @@ export function tickProducts(state, mods, wf, days, log) {
 
     // --- paying conversion, moved toward target so batching stays stable ---
     const convTarget = p.users * cat.conversion * (0.6 + 0.8 * p.quality)
-      * mul(mods, 'conversion') * (1 + supSplit * 0.2 + coverage * 0.08);
+      * mul(mods, 'conversion') * (1 + (p.convMul || 0)) * (1 + supSplit * 0.2 + coverage * 0.08);
     const cur = totalCustomers(p);
     const next = cur + (convTarget - cur) * clamp(0.25 * days, 0, 1);
     const mix = classMix(state, mods, p);
@@ -228,7 +234,7 @@ export function tickProducts(state, mods, wf, days, log) {
     const paying = totalCustomers(p);
     let rev = Math.max(0, p.users - paying) * cat.arpu.free;
     for (const k of CLASS_ORDER) rev += (p.customers[k] || 0) * (cat.arpu[k] || 0);
-    rev *= mul(mods, 'revenue');
+    rev *= mul(mods, 'revenue') * (1 + (p.revMul || 0));
     if (outage) rev *= 0.55;
     p.revenueDay = rev;
     revenue += rev;

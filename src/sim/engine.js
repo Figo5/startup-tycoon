@@ -6,6 +6,9 @@ import { tickEconomy, tickContracts } from './economy.js';
 import { tickResearch } from './research.js';
 import { tickCompetitors } from './competitors.js';
 import { tickEvents } from './events.js';
+import { tickRoadmaps, autoStartRoadmaps } from './roadmap.js';
+import { tickGoals } from './goals.js';
+import { refreshAcquisitionTargets } from './acquisitions.js';
 import { checkStageUp } from './stages.js';
 import { clamp, sum } from './util.js';
 import { MAX_OFFLINE_DAYS, REAL_SECONDS_PER_DAY } from './state.js';
@@ -16,6 +19,9 @@ export const LIVE_STEP_SECONDS = 0.25;
 /** One simulation step of `days` game-days. Everything economic happens here. */
 export function step(state, days, log) {
   if (!(days > 0)) return state;
+  // A settled run is over: no further production, no further payouts, no matter
+  // who calls step() - the live loop, the offline catch-up or a test harness.
+  if (state.exitResult) return state;
   const mods = computeMods(state);
   state.modCache = mods;
   pruneBoosts(state);
@@ -29,6 +35,13 @@ export function step(state, days, log) {
   }
   autoQueueProjects(state, mods, log);
 
+  // Roadmaps run alongside the project queue, driven by product/design/eng output.
+  // A managed engineering department keeps them moving without the player.
+  if (state.departments.engineering?.managerId) {
+    autoStartRoadmaps(state, mods, log, !!mods.flags.has('autoProjects'));
+  }
+  tickRoadmaps(state, mods, wf, days, log);
+
   const { revenue } = tickProducts(state, mods, wf, days, log);
   const infraCost = tickInfra(state, mods, wf, days, log);
   tickContracts(state, mods, days, log);
@@ -37,6 +50,8 @@ export function step(state, days, log) {
   tickResearch(state, mods, days, log);
   tickCompetitors(state, mods, days, log);
   tickEvents(state, mods, days, log);
+  refreshAcquisitionTargets(state);
+  tickGoals(state, mods, days, log);
   checkStageUp(state, log);
 
   state.time.day += days;
@@ -98,6 +113,8 @@ export function runOffline(state, nowMs = Date.now()) {
   const rawSeconds = (nowMs - lastMs) / 1000;
   state.time.lastRealMs = nowMs;
   if (!(rawSeconds > 5)) return null;
+  // An ended run has nothing left to credit, and must never re-open a payout.
+  if (state.exitResult) return null;
 
   const rawDays = rawSeconds / REAL_SECONDS_PER_DAY;
   const days = Math.min(rawDays, MAX_OFFLINE_DAYS);

@@ -20,9 +20,20 @@ const app = {
   ui: null,
   game: null,
   notify(text, kind = 'info') { app.ui?.pushFeed(text, kind); },
-  log(text, kind = 'info') { app.ui?.pushFeed(text, kind); },
+  log(text, kind = 'info') {
+    app.ui?.pushFeed(text, kind);
+    // Company goal completion gets a visible moment; it is the one thing the
+    // player asked for and then waited on.
+    if (kind === 'goal') app.celebrate(text);
+  },
   refresh() { app.mods = computeMods(app.state); app.ui?.render(); },
+  celebrate(text) {
+    const scene = app.game?.scene?.getScene('office');
+    scene?.celebrate?.();
+    app.notify(text, 'goal');
+  },
   togglePause() {
+    if (app.state.exitResult) { app.notify('This run has already ended.', 'bad'); return; }
     app.state.time.paused = !app.state.time.paused;
     app.state.time.lastRealMs = Date.now();
     app.refresh();
@@ -77,17 +88,24 @@ const app = {
   onExit(exitId) {
     const r = performExit(app.state, app.mods, exitId);
     if (!r.ok) { app.notify(r.reason, 'bad'); return; }
-    const meta = r.meta;
-    const sum = r.summary;
-    const scenarios = availableScenarios(meta);
+    app.save();
+    app.showExitSummary();
+  },
+  /** The terminal screen. Reachable again from the Company panel after closing. */
+  showExitSummary() {
+    const state = app.state;
+    const sum = state.exitResult;
+    if (!sum) { app.notify('No exit has been taken in this run.', 'bad'); return; }
+    const scenarios = availableScenarios(state.meta);
     app.ui.showOverlay(`<h2>${sum.name}</h2>
-      <p class="muted">${stageById(app.state.company.stage).name} · ${sum.days} days · ${app.state.employees.length} people</p>
+      <p class="muted">${stageById(state.company.stage).name} · ${sum.day} days · ${state.employees.length} people</p>
       <div class="tile">
         <div class="spread"><span>Company value</span><b>${money(sum.value)}</b></div>
-        <div class="spread"><span>Your stake</span><b>${(app.state.company.founderEquity * 100).toFixed(1)}%</b></div>
+        <div class="spread"><span>Your stake at exit</span><b>${(sum.equity * 100).toFixed(1)}%</b></div>
         <div class="spread"><span>Proceeds</span><b>${money(sum.proceeds)}</b></div>
         <div class="spread"><span>Founder Reputation earned</span><b style="color:var(--accent)">+${sum.rep} FR</b></div>
       </div>
+      <p class="muted small">This stake has been sold. The run is over, and no exit can be taken twice.</p>
       ${sum.achievements.length ? `<p class="small">Achievements: ${sum.achievements.join(', ')}</p>` : ''}
       <hr />
       <h3>Start the next company</h3>
@@ -98,8 +116,10 @@ const app = {
       <div class="row" style="margin-top:12px">
         <button class="btn" id="donext">Found it</button>
         <button class="btn secondary" data-act="open-prestige">Spend Founder Reputation first</button>
+        <button class="btn secondary" data-act="close-overlay">Close (look around first)</button>
       </div>`);
     document.getElementById('donext').onclick = () => {
+      const meta = state.meta;
       app.state = startNextRun(meta, {
         companyName: document.getElementById('nextname').value || randomCompanyName(),
         scenarioId: document.getElementById('nextscenario').value
@@ -161,7 +181,11 @@ function boot() {
   // Offline catch-up before the first frame, so rewards are settled once.
   const summary = runOffline(app.state);
   app.refresh();
-  if (summary && summary.gameDays > 0.25) showOfflineSummary(summary);
+  if (app.state.exitResult) {
+    // A settled run stays settled: reopen the summary instead of pretending
+    // there is something to collect.
+    setTimeout(() => app.showExitSummary(), 300);
+  } else if (summary && summary.gameDays > 0.25) showOfflineSummary(summary);
   else if (!loaded.ok) app.showHelp();
 
   app.game = new Phaser.Game({

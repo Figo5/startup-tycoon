@@ -3,6 +3,10 @@ import { roomById } from '../data/office.js';
 import { SCENARIOS } from '../data/prestige.js';
 import { STAGES, stageById, stageOrder } from '../data/stages.js';
 import { metaEffects } from './state.js';
+import { advisorMods } from './advisors.js';
+import { acquisitionTech } from './acquisitions.js';
+import { goalTech } from './goals.js';
+import { initiativeCommit } from './roadmap.js';
 
 const FLAT_KEYS = new Set(['capacity', 'deskBonus', 'candidateSlots']);
 const START_KEYS = new Set(['startCash', 'founderSkill', 'startReputation', 'startEngineers',
@@ -29,6 +33,14 @@ export function computeMods(state) {
   for (const b of state.boosts) if (b.until > state.time.day) merge(b.mods);
   merge(metaEffects(state.meta));
   merge((SCENARIOS.find((s) => s.id === state.scenarioId) || {}).mods);
+  // Retained advisors, technology bought with acquisitions, and goal rewards.
+  // All three are permanent for the run and each is applied once at its source.
+  merge(advisorMods(state));
+  merge(acquisitionTech(state));
+  merge(goalTech(state));
+  // How much engineering an active roadmap initiative takes out of the product
+  // queue. Read by products.distributeEngineering.
+  m.initiativeCommit = initiativeCommit(state);
 
   const stage = stageById(state.company.stage);
   // Unlocks are cumulative: everything earned at or below the current stage

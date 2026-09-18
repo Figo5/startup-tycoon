@@ -220,7 +220,9 @@ function paint(scene, key, rows, palette) {
 
 export const SHIRTS = {
   founder: '#f2c14e', engineering: '#5aa9e6', product: '#f2b134', sales: '#ef6f6c',
-  marketing: '#e879a8', support: '#6ec07a', infra: '#a184e0', neutral: '#9aa5b1'
+  marketing: '#e879a8', support: '#6ec07a', infra: '#a184e0', neutral: '#9aa5b1',
+  // Retained advisors get their own colour so they read as visitors, not staff.
+  advisor: '#c9a227'
 };
 const HAIRS = ['#3a2c22', '#1d1a17', '#7a4a2a', '#b8b1a5', '#5c3f6b'];
 const SKINS = ['#e8bd94', '#d29a6b', '#a9744a', '#7a5334', '#f2d3b3'];

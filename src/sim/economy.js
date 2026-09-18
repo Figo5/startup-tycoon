@@ -3,6 +3,9 @@ import { tierById } from '../data/office.js';
 import { mul, flat } from './modifiers.js';
 import { liveProducts, totalCustomers } from './products.js';
 import { fire } from './workforce.js';
+import { acquiredRevenue } from './acquisitions.js';
+import { advisorRetainerDay } from './advisors.js';
+import { roadmapRunDay } from './roadmap.js';
 
 export const MISC_COST_PER_EMPLOYEE_DAY = 6;
 
@@ -47,10 +50,13 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   const marketing = Math.max(0, state.company.marketingBudget);
   const misc = state.employees.length * MISC_COST_PER_EMPLOYEE_DAY;
   const contracts = contractRevenue(state);
+  const acquired = acquiredRevenue(state);
+  const advisors = advisorRetainerDay(state);
+  const roadmap = roadmapRunDay(state);
   const penalties = slaPenalty(state, 1);
 
-  const revDay = revenue + contracts - penalties;
-  const expDay = wf.payrollDay + infraCost + marketing + rent + misc;
+  const revDay = revenue + contracts + acquired - penalties;
+  const expDay = wf.payrollDay + infraCost + marketing + rent + misc + advisors + roadmap;
 
   st.revenueDay = revDay;
   st.payrollDay = wf.payrollDay;
@@ -58,6 +64,9 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   st.marketingDay = marketing;
   st.rentDay = rent;
   st.miscDay = misc;
+  st.acquiredDay = acquired;
+  st.advisorDay = advisors;
+  st.roadmapDay = roadmap;
   st.expenseDay = expDay;
   st.netDay = revDay - expDay;
   st.users = sum(liveProducts(state), (p) => p.users);

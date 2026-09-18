@@ -4,6 +4,7 @@ import { categoryById } from '../data/products.js';
 import { mul, flat, has } from './modifiers.js';
 import { prioritySplit } from './workforce.js';
 import { liveProducts, totalCustomers } from './products.js';
+import { acquiredInfraLoad } from './acquisitions.js';
 
 export const UNIT_COST_DAY = 3.2;      // $ per capacity unit per day
 export const TARGET_UTILIZATION = 0.7;  // what autoscaling aims for
@@ -20,6 +21,8 @@ export function computeLoad(state) {
     load += (p.users / 1000) * cat.infraLoad * (1 - p.infraEff);
   }
   for (const c of state.contracts) load += c.infraLoad || 0;
+  // Companies you bought bring their infrastructure footprint with them.
+  load += acquiredInfraLoad(state);
   return load;
 }
 
@@ -50,6 +53,7 @@ export function tickInfra(state, mods, wf, days, log) {
   const cap = Math.max(1, effectiveCapacity(state, mods));
   const util = infra.load / cap;
   infra.utilization = util;
+  state.stats.loadRatio = util;
 
   const costEff = clamp(1 - (1 - split) * infraOut * 0.010, 0.45, 1);
   const costDay = infra.capacity * UNIT_COST_DAY * mul(mods, 'infraCost', -0.85) * costEff;
