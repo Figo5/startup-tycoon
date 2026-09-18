@@ -1,3 +1,5 @@
+Startup Tycoon balance report
+1 game day = 2 real minutes · horizon 24 real hours · seeds 11, 202, 3003
 
 ========================================================================================================
 Idle (checks ~every 30 min)
@@ -6,32 +8,32 @@ Idle (checks ~every 30 min)
 seed 11
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $14.6K        $2       $72      298       2     1    1      $19.6K  solo
-1 hour          30    $17.8K      $830      $239    62.1K    1.9K     1    1       $5.4M  solo
-4 hours        120     $2.5M    $12.2K     $6.4K     230K   15.0K     5    3      $44.7M  seed
-8 hours        240    $27.9M     $129K    $43.6K     2.5M    177K    27    5       $922M  scaleup
-  milestones  first hire 1.00h | office 1.50h | 2nd product 1.50h | manager 5.01h | funding 1.00h | enterprise 3.51h
-  stages      solo 0.00h | tiny 1.50h | seed 2.51h | growing 5.51h | scaleup 7.51h | major 9.51h | late 12.51h
-  EXIT        IPO at 12.51h - $27.0B valuation, 40% owned, 11 Founder Reputation
+1 hour          30    $84.2K      $771      $588    58.2K    1.7K     2    1       $5.6M  tiny
+4 hours        120    $21.2M    $28.9K    $12.2K     718K   40.9K    13    4       $247M  growing
+8 hours        240     $110M     $543K     $133K    12.2M    740K    50    5       $5.5B  major
+  milestones  first hire 0.50h | office 1.50h | 2nd product 1.00h | manager 3.51h | funding 1.00h | enterprise 3.01h
+  stages      solo 0.00h | tiny 1.00h | seed 2.00h | growing 3.51h | scaleup 6.01h | major 8.01h | late 10.51h
+  EXIT        IPO at 10.51h - $25.0B valuation, 37% owned, 10 Founder Reputation
 
 seed 202
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $14.6K        $2       $72      304       2     1    1      $20.2K  solo
-1 hour          30    $15.5K      $610      $209    50.8K    1.3K     1    1       $4.1M  solo
-4 hours        120     $1.7M    $23.1K     $8.6K     389K   25.6K     9    3       $129M  growing
-8 hours        240    $64.5M     $336K     $108K     4.7M    314K    46    5       $2.2B  scaleup
-  milestones  first hire 1.00h | office 1.50h | 2nd product 1.50h | manager 4.01h | funding 1.00h | enterprise 3.01h
-  stages      solo 0.00h | tiny 1.50h | seed 2.00h | growing 4.01h | scaleup 6.01h | major 8.51h | late 11.01h
-  EXIT        IPO at 11.01h - $49.9B valuation, 36% owned, 14 Founder Reputation
+1 hour          30    $83.7K      $684      $565    51.2K    1.5K     2    1       $5.0M  tiny
+4 hours        120     $2.2M    $21.8K    $10.4K     528K   31.1K    12    3       $181M  growing
+8 hours        240    $55.9M     $505K     $137K     7.1M    536K    54    5       $3.2B  major
+  milestones  first hire 0.50h | office 1.50h | 2nd product 1.00h | manager 3.51h | funding 1.00h | enterprise 3.01h
+  stages      solo 0.00h | tiny 1.00h | seed 2.00h | growing 4.01h | scaleup 5.51h | major 8.01h | late 11.51h
+  EXIT        IPO at 11.51h - $43.2B valuation, 34% owned, 13 Founder Reputation
 
 seed 3003
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $14.6K        $0       $72        0       0     1    1       $5.1K  solo
-1 hour          30    $17.0K      $739      $227    53.4K    1.7K     1    1       $4.9M  solo
-4 hours        120     $1.6M    $16.7K     $8.7K     277K   18.4K     9    3      $68.6M  seed
-8 hours        240    $78.7M     $206K    $64.6K     5.1M    308K    34    5       $2.1B  scaleup
-  milestones  first hire 1.00h | office 1.50h | 2nd product 1.50h | manager 4.01h | funding 1.00h | enterprise 3.01h
-  stages      solo 0.00h | tiny 1.50h | seed 2.00h | growing 4.51h | scaleup 7.01h | major 9.01h | late 11.51h
-  EXIT        IPO at 11.51h - $44.8B valuation, 34% owned, 13 Founder Reputation
+1 hour          30    $84.0K      $726      $574    55.4K    1.6K     2    1       $5.3M  tiny
+4 hours        120     $2.3M    $19.3K     $8.0K     332K   21.6K    10    3       $103M  growing
+8 hours        240    $79.7M     $286K    $89.7K     4.1M    262K    40    5       $2.6B  scaleup
+  milestones  first hire 0.50h | office 1.50h | 2nd product 1.00h | manager 5.01h | funding 1.00h | enterprise 3.01h
+  stages      solo 0.00h | tiny 1.00h | seed 2.00h | growing 4.01h | scaleup 6.51h | major 8.51h | late 11.01h
+  EXIT        IPO at 11.01h - $40.2B valuation, 31% owned, 12 Founder Reputation
 
 ========================================================================================================
 Moderate (checks ~every 12 min)
@@ -40,29 +42,29 @@ Moderate (checks ~every 12 min)
 seed 11
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $14.6K        $2       $72      298       2     1    1      $19.6K  solo
-1 hour          30     $104K     $1.3K     $1.6K    86.0K    3.0K     3    2       $9.4M  tiny
-4 hours        120    $32.1M     $250K    $93.4K     2.5M    197K    54    5       $2.5B  scaleup
-  milestones  first hire 0.60h | office 0.80h | 2nd product 0.80h | manager 2.41h | funding 0.60h | enterprise 2.01h
-  stages      solo 0.00h | tiny 0.80h | seed 1.21h | growing 2.01h | scaleup 3.02h | major 4.43h | late 5.43h
-  EXIT        IPO at 5.43h - $40.8B valuation, 33% owned, 12 Founder Reputation
+1 hour          30     $551K     $1.4K      $891    90.4K    3.2K     2    2      $10.4M  tiny
+4 hours        120    $46.0M     $443K     $139K     7.6M    426K    70    5       $6.7B  major
+  milestones  first hire 0.40h | office 1.00h | 2nd product 0.60h | manager 1.81h | funding 0.80h | enterprise 2.01h
+  stages      solo 0.00h | tiny 0.60h | seed 1.21h | growing 1.81h | scaleup 2.62h | major 4.03h | late 4.83h
+  EXIT        IPO at 4.83h - $40.6B valuation, 31% owned, 12 Founder Reputation
 
 seed 202
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $14.6K        $2       $72      304       2     1    1      $20.2K  solo
-1 hour          30     $299K      $952      $634    68.8K    2.2K     2    2       $7.4M  tiny
-4 hours        120    $31.0M     $166K    $69.9K     2.1M    169K    49    5       $1.4B  scaleup
-  milestones  first hire 0.40h | office 1.00h | 2nd product 0.80h | manager 2.62h | funding 0.80h | enterprise 2.21h
-  stages      solo 0.00h | tiny 0.80h | seed 1.41h | growing 2.01h | scaleup 3.22h | major 4.83h | late 5.43h
-  EXIT        IPO at 5.43h - $36.4B valuation, 31% owned, 11 Founder Reputation
+1 hour          30     $372K     $1.2K     $1.4K    82.8K    2.8K     3    2       $9.2M  tiny
+4 hours        120    $24.4M     $365K     $116K     5.8M    362K    59    5       $4.4B  scaleup
+  milestones  first hire 0.60h | office 1.00h | 2nd product 0.80h | manager 1.81h | funding 0.80h | enterprise 2.01h
+  stages      solo 0.00h | tiny 0.80h | seed 1.21h | growing 2.01h | scaleup 2.62h | major 4.03h | late 5.03h
+  EXIT        IPO at 5.03h - $47.3B valuation, 28% owned, 12 Founder Reputation
 
 seed 3003
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $14.6K        $0       $72        0       0     1    1       $5.1K  solo
-1 hour          30     $220K     $1.6K     $1.3K     106K    3.8K     3    1      $12.0M  tiny
-4 hours        120    $12.1M     $340K     $116K     6.1M    366K    66    5       $3.9B  scaleup
-  milestones  first hire 0.80h | office 1.00h | 2nd product 1.00h | manager 1.81h | funding 0.60h | enterprise 2.01h
-  stages      solo 0.00h | tiny 1.00h | seed 1.21h | growing 1.81h | scaleup 2.62h | major 4.23h | late 5.03h
-  EXIT        IPO at 5.03h - $53.7B valuation, 31% owned, 14 Founder Reputation
+1 hour          30     $432K     $1.3K     $1.1K    85.7K    2.9K     3    2       $9.7M  tiny
+4 hours        120    $13.9M     $314K     $107K     3.3M    208K    50    5       $4.0B  scaleup
+  milestones  first hire 0.40h | office 1.00h | 2nd product 0.60h | manager 2.01h | funding 0.80h | enterprise 2.01h
+  stages      solo 0.00h | tiny 0.60h | seed 1.21h | growing 2.01h | scaleup 2.82h | major 4.23h | late 5.23h
+  EXIT        IPO at 5.23h - $31.4B valuation, 33% owned, 11 Founder Reputation
 
 ========================================================================================================
 Active (checks ~every 5 min, plays minigames)
@@ -71,29 +73,73 @@ Active (checks ~every 5 min, plays minigames)
 seed 11
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $86.4K        $3      $415      400       5     2    1      $53.1K  solo
-1 hour          30     $612K     $3.0K     $4.6K     160K    7.2K     7    3      $28.6M  seed
-  milestones  first hire 0.09h | office 0.59h | 2nd product 0.34h | manager 1.26h | funding 0.51h | enterprise 1.35h
-  stages      solo 0.00h | tiny 0.34h | seed 0.76h | growing 1.26h | scaleup 1.77h | major 2.71h | late 3.22h
-  EXIT        IPO at 3.22h - $38.9B valuation, 37% owned, 13 Founder Reputation
+1 hour          30     $686K     $3.0K     $4.1K     166K    7.7K     8    3      $29.4M  seed
+  milestones  first hire 0.09h | office 0.42h | 2nd product 0.42h | manager 1.26h | funding 0.51h | enterprise 1.43h
+  stages      solo 0.00h | tiny 0.42h | seed 0.76h | growing 1.18h | scaleup 1.77h | major 2.88h | late 3.39h
+  EXIT        IPO at 3.39h - $41.5B valuation, 34% owned, 13 Founder Reputation
 
 seed 202
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $86.7K        $4      $402      427       4     2    1      $54.2K  solo
-1 hour          30     $1.5M     $2.5K     $4.6K     173K    7.6K     7    3      $24.9M  seed
-  milestones  first hire 0.09h | office 0.59h | 2nd product 0.59h | manager 1.35h | funding 0.67h | enterprise 1.52h
-  stages      solo 0.00h | tiny 0.59h | seed 0.84h | growing 1.35h | scaleup 1.94h | major 2.88h | late 3.47h
-  EXIT        IPO at 3.47h - $45.1B valuation, 31% owned, 12 Founder Reputation
+1 hour          30     $746K     $3.0K     $3.7K     169K    7.6K     6    3      $28.6M  seed
+  milestones  first hire 0.09h | office 0.59h | 2nd product 0.42h | manager 1.52h | funding 0.51h | enterprise 1.52h
+  stages      solo 0.00h | tiny 0.42h | seed 0.76h | growing 1.35h | scaleup 2.03h | major 3.05h | late 3.56h
+  EXIT        IPO at 3.56h - $41.9B valuation, 37% owned, 13 Founder Reputation
 
 seed 3003
 checkpoint     day      cash   rev/day   exp/day    users    cust staff prod   valuation  stage
 10 min           5    $86.7K        $3      $402      402       4     2    1      $51.9K  solo
-1 hour          30     $560K     $2.8K     $3.6K     156K    7.1K     7    3      $26.6M  seed
-  milestones  first hire 0.09h | office 0.59h | 2nd product 0.42h | manager 1.43h | funding 0.51h | enterprise 1.43h
-  stages      solo 0.00h | tiny 0.42h | seed 0.76h | growing 1.26h | scaleup 1.77h | major 2.71h | late 3.39h
-  EXIT        IPO at 3.39h - $41.4B valuation, 33% owned, 12 Founder Reputation
+1 hour          30     $840K     $2.9K     $4.1K     171K    7.3K     7    3      $28.3M  seed
+  milestones  first hire 0.09h | office 0.42h | 2nd product 0.42h | manager 1.43h | funding 0.51h | enterprise 1.52h
+  stages      solo 0.00h | tiny 0.42h | seed 0.76h | growing 1.43h | scaleup 1.94h | major 3.05h | late 3.56h
+  EXIT        IPO at 3.56h - $45.3B valuation, 31% owned, 12 Founder Reputation
+
+========================================================================================================
+Roadmaps, advisors, acquisitions and goals played (same operator otherwise)
+========================================================================================================
+Idle (checks ~every 30 min)                  first exit 11.18h (11.0h / 11.5h / 11.0h)  roadmap started 3/3
+Moderate (checks ~every 12 min)              first exit 5.03h (5.2h / 5.0h / 4.8h)  roadmap started 3/3
+Active (checks ~every 5 min, plays minigames) first exit 3.36h (3.4h / 3.6h / 3.1h)  roadmap started 3/3
+
+========================================================================================================
+Post-prestige: run 1 (all systems) -> spend everything -> run 2
+========================================================================================================
+Moderate (checks ~every 12 min)
+  run 1 exited no exit; bought 0 levels for 0 FR; left 0 FR
+  upgrades    none
+  run 2       first hire 0.40h | manager 1.81h | funding 0.80h | exit 5.23h (31% owned, 14 FR)
+Active (checks ~every 5 min, plays minigames)
+  run 1 exited no exit; bought 0 levels for 0 FR; left 0 FR
+  upgrades    none
+  run 2       first hire 0.09h | manager 1.18h | funding 0.51h | exit 3.39h (28% owned, 11 FR)
+
+========================================================================================================
+Repeat-claim scan (each of these must be exactly once)
+========================================================================================================
+  ok   founder upgrades stop at max — 53 levels
+  ok   founder reputation never negative — 3524 left
+  ok   a replayed purchase transaction pays once — That purchase was already applied.
+  ok   unaffordable purchase refused
+  ok   exit pays exactly once — This run has already ended.
+  ok   equity cannot go negative
+  ok   run history recorded once
+  ok   replayed exits and further steps pay nothing — 4 FR
+  ok   advisor slots cap the stack — 3/3
+  ok   advisor modifiers stay bounded — devSpeed -0.08
+  ok   an acquisition cannot be bought twice — Already acquired.
+  ok   people added exactly once
+  ok   technology applied exactly once — {"contractSize":0.12,"revenue":0.04,"reliability":0.03}
+  ok   roadmap effect applied exactly once — acqMul +0.060
+  ok   roadmap not re-runnable
+  ok   goal reward paid exactly once — +180000 (reward 180000)
+  ok   goal completed once
+
+  17/17 repeat-claim checks pass
 
 Assumptions: 1 game day = 2 real minutes. Offline time is credited identically to
 online time up to the 16-hour cap, so a multi-day horizon assumes the player returns
 at least once every 16 hours. The scripted operator is deliberately competent but not
 optimal: it hires on need, reinvests ~28% of revenue in marketing, takes funding only
 when runway is short or the round is large, and never micro-optimises project order.
+The "new systems" section uses the same operator plus roadmaps, advisors, acquisitions
+and goals, so the difference between the two sections is those four systems.

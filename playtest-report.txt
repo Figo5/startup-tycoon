@@ -1,6 +1,6 @@
 1. fresh start
   shot shots/01-fresh-start.png
-    {"stage":"solo","cash":14998.593333333338,"product":"Fathom","desks":6}
+    {"stage":"solo","cash":14998.417500000005,"product":"Quartz","desks":6}
 2. run 12 game days -> MVP launches
     product stage: live
   shot shots/02-after-launch.png
@@ -20,7 +20,7 @@
   shot shots/08-minigame.png
     boosts after minigame: ["mg_debug","firefight"]
 8. save, reload, and confirm the company persisted
-    before {"cash":1888990,"day":12,"staff":12,"tier":"suite"} 
+    before {"cash":1888991,"day":12,"staff":12,"tier":"suite"} 
     after  {"cash":1888180,"day":13,"staff":12,"tier":"suite"}
 9. simulate three hours away
   shot shots/09-offline-summary.png

@@ -18,6 +18,10 @@ import { eventById } from '../src/data/events.js';
 import { exitPreview, performExit } from '../src/sim/prestige.js';
 import { acquisitionTargets, acquire } from '../src/sim/competitors.js';
 import { addBoost } from '../src/sim/modifiers.js';
+import { ensureRoadmap, suggestRoadmap, startRoadmap } from '../src/sim/roadmap.js';
+import { advisorOffers, hireAdvisor } from '../src/sim/advisors.js';
+import { acquisitionOffers, acquireCompany } from '../src/sim/acquisitions.js';
+import { offeredGoals, acceptGoal } from '../src/sim/goals.js';
 import { money, abbrev } from '../src/sim/util.js';
 
 export const DAYS_PER_REAL_HOUR = 3600 / REAL_SECONDS_PER_DAY;   // 30
@@ -152,6 +156,40 @@ export function operate(state, profile, marks) {
   if (has(mods, 'acquisitions')) {
     const t = acquisitionTargets(state).filter((x) => cash() > x.price * 3.5).sort((a, b) => b.strength - a.strength)[0];
     if (t) { acquire(state, mods, t.id); marks.firstAcquisition = marks.firstAcquisition || state.time.day; }
+  }
+
+  // 9c. The new long-term systems. Only played when the profile says so, so the
+  //     baseline pacing numbers stay comparable with earlier reports. `skip`
+  //     lets the per-system contribution be measured one at a time.
+  const skipped = profile.skip || [];
+  if (profile.systems) {
+    // Roadmap: keep one initiative running whenever the cash allows it.
+    if (!skipped.includes('roadmap')) {
+      for (const p of state.products) {
+        const rm = ensureRoadmap(p);
+        if (rm.active) continue;
+        const pick = suggestRoadmap(state, p);
+        if (pick && cash() > pick.cost * 5) {
+          const r = startRoadmap(state, mods, p.id, pick.id);
+          if (r.ok) marks.firstRoadmap = marks.firstRoadmap || state.time.day;
+        }
+      }
+    }
+    // Advisor: fill slots when the engagement fee is comfortably affordable.
+    if (!skipped.includes('advisor')) {
+      const hireable = advisorOffers(state).filter((a) => a.available).sort((a, b) => b.fee - a.fee)[0];
+      if (hireable && cash() > hireable.fee * 6) hireAdvisor(state, hireable.id);
+    }
+    // Company for sale: buy when it is cheap relative to cash on hand.
+    if (!skipped.includes('acquisition')) {
+      const target = acquisitionOffers(state).filter((t) => t.available).sort((a, b) => a.price - b.price)[0];
+      if (target && cash() > target.price * 4) acquireCompany(state, mods, target.id);
+    }
+    // Goals: take whatever is on offer, one at a time.
+    if (!skipped.includes('goal') && !state.goals.active) {
+      const g = offeredGoals(state)[0];
+      if (g) acceptGoal(state, g.id);
+    }
   }
 
   // 10. Promotions for management

@@ -1,0 +1,118 @@
+
+1. fresh save boots, canvas renders
+  ok   canvas present
+  ok   top bar shows the company
+
+2. an existing v3 save migrates in the browser
+  ok   legacy cash preserved — 777772
+  ok   legacy equity preserved — 0.8
+  ok   legacy headcount preserved — 2
+  ok   legacy founder reputation preserved — 12
+  ok   legacy upgrade preserved — 1
+  ok   schema upgraded to 4 — 4
+  ok   new systems initialised empty
+  ok   nothing awarded retroactively
+
+3. founder upgrades cannot be spam-maxed through the UI
+  ok   two clicks on one control buy one level — level 1 -> 2, 56 FR left
+  ok   exactly one price was deducted — 56 FR (price 4)
+  ok   a real double click does not buy two levels — level 1 -> 3, 49 FR left
+  ok   the track stops at its maximum — level 5
+  ok   a maxed track shows MAX — prestige card labels it MAX
+  ok   no buy control remains at max
+  ok   founder reputation never negative
+
+4. a cash-out cannot be taken twice
+  ok   an exit is on offer
+  ok   the summary appears
+  ok   ownership transferred exactly once — 0.8 -> 0
+  ok   the exit paid once — 0 -> 1 FR, 1 -> 2 runs
+  ok   the run is paused and ended
+  ok   the panel says the run has ended
+  ok   no exit control is offered again
+  ok   playing on pays nothing more — 1 FR, 2 runs
+  ok   equity cannot go negative — 0
+  ok   founder upgrades stay reachable after an exit
+
+5. a new company starts clean and keeps the founder progression
+  ok   fresh company, fresh equity
+  ok   run history kept — 2 runs
+  ok   founder upgrade kept
+  ok   per-run systems reset
+
+6. event cadence: more opportunities, inbox stays sane
+  ok   events arrive more often than the old 1-per-5-days — 20 events in 60 game days = 0.333/day
+  ok   the inbox never holds more than the cap — 1 pending
+  ok   no negative cooldown backlog — 1.6625435166448925
+
+7. roadmap: choose an initiative and finish it
+  ok   roadmap choices are offered in the UI — 14 options
+  ok   an initiative is running — Referral System
+  ok   the fee was charged once — -25000
+  ok   engineering is committed to it — commit 0.55
+  ok   the initiative completes exactly once — referral
+  ok   the effect landed on the product — {"acq":0.06,"rev":0,"conv":0.02,"churn":0}
+
+8. advisor: retain one and verify the effect
+  ok   advisors are offered
+  ok   one advisor is on staff — growth_hacker
+  ok   their effects reach the simulation — marketSize, conversion
+  ok   the retainer is charged daily — $65/day
+
+9. acquisition: buy a company, once
+  ok   a company is for sale
+  ok   the acquisition completed
+  ok   their people joined — 1 -> 3
+  ok   technology was gained — {"conversion":0.04,"researchSpeed":0.05}
+  ok   integration is running
+  ok   it is off the market
+  ok   it cannot be bought again — 2 buy controls left
+
+10. company goal: accept one and complete it
+  ok   three goals are offered or one is active
+  ok   a goal can be accepted
+  ok   exactly one goal is active — enterprise_push
+  ok   the goal completed once — enterprise_push
+  ok   nothing is left active
+  ok   it does not complete again — 1
+
+11. save, reload, and confirm every new system persisted
+  ok   cash and headcount survived
+  ok   advisors survived — growth_hacker
+  ok   completed goals survived — enterprise_push
+  ok   acquisitions survived — chartly
+  ok   shipped roadmaps survived — referral
+  ok   acquired technology survived
+  ok   founder upgrades survived
+  ok   no goal reward replays after a reload — 1
+
+12. layout and text at the two target viewports
+  ok   no panel overlap at 1366x768
+  ok   nothing off-screen at 1366x768
+  ok   no horizontal overflow at 1366x768
+  ok   no text below the 10px design floor at 1366x768
+  ok   no panel overlap at 1440x900
+  ok   nothing off-screen at 1440x900
+  ok   no horizontal overflow at 1440x900
+  ok   no text below the 10px design floor at 1440x900
+  ok   text size does not change between the two viewports
+
+13. every panel renders, including the two new ones
+  ok   panel company renders — 1113 chars
+  ok   panel products renders — 3026 chars
+  ok   panel employees renders — 547 chars
+  ok   panel departments renders — 1685 chars
+  ok   panel research renders — 4826 chars
+  ok   panel finance renders — 1632 chars
+  ok   panel office renders — 1708 chars
+  ok   panel competitors renders — 2754 chars
+  ok   panel advisors renders — 3370 chars
+  ok   panel goals renders — 815 chars
+
+14. keyboard: ten panels, space pauses when it should
+  ok   9 opens the advisors panel
+  ok   0 opens the goals panel
+  ok   space toggles pause
+
+=== playtest-v2 result ===
+no console errors, every interaction behaved
