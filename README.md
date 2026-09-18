@@ -122,6 +122,10 @@ are now impossible by construction rather than by clamping the result afterwards
   Rewards are cash, reputation and small permanent efficiency effects, paid once.
 - **People** — 10 roles across 6 departments, each contributing to specific outputs.
   Skill, productivity, experience, morale, specialties, promotion and reassignment.
+- **Starting over** — three separate things, named apart in the Company panel:
+  *Start a new company* (run only, founder keeps everything), prestige/exit (bank a
+  run), and *Reset all progress* (deletes the company and all founder meta, back to a
+  first-ever game). See DESIGN.md for exactly what the full reset clears.
 - **Departments** — each has a priority setting that changes what its effort buys.
   Managers unlock automation: an engineering manager keeps the top product's queue
   full by itself, and Delivery Playbooks research extends that to every product.

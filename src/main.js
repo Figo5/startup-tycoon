@@ -6,7 +6,7 @@ import { newGame, REAL_SECONDS_PER_DAY, OFFLINE_CAP_HOURS } from './sim/state.js
 import { step, runOffline, LIVE_STEP_SECONDS } from './sim/engine.js';
 import { spawnEvent } from './sim/events.js';
 import { computeMods } from './sim/modifiers.js';
-import { save, load, exportSave, importSave, resetGame, claimTab } from './sim/save.js';
+import { save, load, exportSave, importSave, resetGame, resetAllProgress, claimTab } from './sim/save.js';
 import { performExit, startNextRun, availableScenarios } from './sim/prestige.js';
 import { money, abbrev, fmtDuration } from './sim/util.js';
 import { stageById } from './data/stages.js';
@@ -84,6 +84,37 @@ const app = {
       app.ui.hideOverlay();
       app.notify('New company founded.', 'stage');
     };
+  },
+  /**
+   * Deliberate, in-game full reset. The confirmation card names every loss, and
+   * its destructive button is armed only after a beat so a stray double click on
+   * the control that opened the card cannot fire it.
+   */
+  resetAllProgress() {
+    app.ui.showOverlay(`<h2>Reset all progress?</h2>
+      <p>This permanently deletes your company and all Founder progression.
+      You will return to a brand-new Solo Founder with no prestige bonuses.</p>
+      <p class="muted small">Cleared: cash, employees, products, office upgrades, departments, research,
+      infrastructure, funding rounds and founder equity, events, advisors, roadmaps, acquisitions, goals,
+      the current stage and any exit - plus every Founder Reputation point, every upgrade level, previous
+      companies and run history, permanent bonuses and unlocks. UI preferences such as reduced motion are
+      left alone. Export first if you want to keep a copy.</p>
+      <div class="row"><button class="btn danger" id="doallreset" disabled>Reset everything (arming…)</button>
+      <button class="btn secondary" data-act="close-overlay">Cancel</button></div>`);
+    const go = document.getElementById('doallreset');
+    setTimeout(() => { go.disabled = false; go.textContent = 'Reset everything'; }, 1200);
+    go.onclick = () => app.applyResetAllProgress();
+  },
+  applyResetAllProgress() {
+    const { state, removed } = resetAllProgress({ companyName: randomCompanyName() });
+    // The simulation is reading app.state, so replacing it here stops the old
+    // company dead: nothing keeps stepping, and no queued offline work survives.
+    app.state = state;
+    app.mods = computeMods(app.state);
+    app.ui.hideOverlay();
+    app.ui.render();
+    app.save();
+    app.notify(`All progress reset. ${removed.length} stored key${removed.length === 1 ? '' : 's'} cleared.`, 'stage');
   },
   onExit(exitId) {
     const r = performExit(app.state, app.mods, exitId);

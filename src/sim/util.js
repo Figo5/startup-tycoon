@@ -9,6 +9,10 @@ export function uid(prefix = 'id') {
 // Saves carry the counter so ids stay unique across reloads.
 export const getIdCounter = () => idCounter;
 export const setIdCounter = (n) => { if (Number.isFinite(n) && n > idCounter) idCounter = n; };
+// Used only by a full reset, so a fresh game gets the same id sequence a
+// first-ever player would have seen. Ids also carry random characters, so an
+// older id can never collide with a new one.
+export function resetIdCounter() { idCounter = 1; }
 
 const UNITS = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc'];
 export function abbrev(n, digits = 1) {

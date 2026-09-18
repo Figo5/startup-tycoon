@@ -1,5 +1,5 @@
 import { SAVE_VERSION, emptyMeta, newGame, normalizeMeta, emptyRoadmap } from './state.js';
-import { getIdCounter, setIdCounter } from './util.js';
+import { getIdCounter, setIdCounter, resetIdCounter } from './util.js';
 import { normalizeEquity } from './equity.js';
 import { ensureAdvisors } from './advisors.js';
 import { ensureGoals } from './goals.js';
@@ -175,6 +175,53 @@ export function resetGame(keepMeta = true) {
   const ls = store();
   if (ls) ls.removeItem(SAVE_KEY);
   return newGame({ meta });
+}
+
+// --- full reset ------------------------------------------------------------
+// Everything under the progress prefix can carry game progress and is removed by
+// a reset. UI preferences live under their own prefix and are never touched, so
+// a reset cannot take a player's motion/volume/theme settings with it.
+export const PROGRESS_PREFIX = 'startup-tycoon/';
+export const PREF_PREFIX = 'startup-tycoon/prefs/';
+
+/** Every stored key that could be holding progress. */
+export function progressKeys(ls = store()) {
+  if (!ls) return [];
+  const keys = [];
+  for (let i = 0; i < ls.length; i++) {
+    const k = ls.key(i);
+    if (k && k.startsWith(PROGRESS_PREFIX) && !k.startsWith(PREF_PREFIX)) keys.push(k);
+  }
+  return keys;
+}
+
+/**
+ * Removes every progress-bearing key - the live save, the corrupt-save recovery
+ * copy, the single-tab claim, and anything an older or future build stored under
+ * the same prefix, so no legacy key can recreate meta progression. Returns the
+ * keys removed, so a caller can report exactly what went.
+ */
+export function clearProgressKeys(ls = store()) {
+  if (!ls) return [];
+  const removed = progressKeys(ls);
+  for (const k of removed) { try { ls.removeItem(k); } catch { /* keep going */ } }
+  return removed;
+}
+
+/**
+ * The one authoritative full reset: wipes every progress key, then hands back a
+ * completely new state built by the same constructor a first-ever load uses.
+ * The clean state is persisted once, with a fresh clock, so a reload shows it and
+ * offline catch-up has nothing to replay. Safe to call repeatedly.
+ */
+export function resetAllProgress({ companyName, seed } = {}) {
+  const removed = clearProgressKeys();
+  resetIdCounter();
+  const state = newGame({ companyName, seed });
+  state.time.lastRealMs = Date.now();
+  state.time.startedRealMs = state.time.lastRealMs;
+  save(state);
+  return { state, removed };
 }
 
 export function exportSave(state) {

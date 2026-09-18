@@ -290,6 +290,7 @@ export function createUI(app) {
       case 'export': app.exportSave(); break;
       case 'import': app.importSave(); break;
       case 'reset': app.resetGame(); break;
+      case 'reset-all': app.resetAllProgress(); break;
       default: break;
     }
   }

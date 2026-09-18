@@ -192,6 +192,25 @@ costing 2–12 for their first level — enough for two or three meaningful pick
 the whole board. `npm run balance` also simulates a second run with the first run's
 reputation spent, and prints the upgrade levels that bought.
 
+## Starting over
+
+Three different things, deliberately named apart in the Company panel:
+
+| Control | Keeps | Use it when |
+|---|---|---|
+| **Start a new company** (Company panel, Save) | the run ends without an exit; Founder Reputation, upgrades and run history all stay | you want a different company with the same founder |
+| Prestige / exit | the run is sold once and the meta carries over | you want to bank a run |
+| **Reset all progress** (Company panel) | nothing | you want the exact state of a first-ever player |
+
+**Reset all progress** clears the live save, the corrupt-save recovery copy, the
+single-tab claim and any older key under the game's storage prefix, then rebuilds
+the state with the same constructor a first-ever load uses and persists it once, so
+a reload shows the clean game and offline catch-up has nothing to replay. The
+implementation is `resetAllProgress()` in `src/sim/save.js`. UI preferences are
+stored under a separate prefix (`startup-tycoon/prefs/`) and are never touched. The
+confirmation names every loss, and its destructive button is armed only after a
+short delay so a stray double click cannot fire it.
+
 ## Save strategy
 
 `src/sim/save.js` owns everything persistent. `SAVE_VERSION` is 4.

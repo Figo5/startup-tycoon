@@ -169,7 +169,9 @@ export default class OfficeScene extends Phaser.Scene {
    */
   syncAdvisors() {
     const state = this.game$.state;
-    const hired = state.advisors?.hired || [];
+    // Cosmetic only: anything without a usable id is skipped rather than thrown
+    // on, so malformed save data can never stall the frame loop.
+    const hired = (state.advisors?.hired || []).filter((h) => typeof h?.id === 'string');
     const want = new Set(hired.map((h) => `adv_${h.id}`));
     for (const [id, a] of [...this.agents]) {
       if (!a.advisor) continue;

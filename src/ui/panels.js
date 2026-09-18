@@ -153,9 +153,17 @@ export function company(ctx) {
       ${btn('save-now', 'Save now', { cls: 'btn secondary' })}
       ${btn('export', 'Export save', { cls: 'btn secondary' })}
       ${btn('import', 'Import save', { cls: 'btn secondary' })}
-      ${btn('reset', 'Reset company', { cls: 'btn danger' })}
     </div>
-    <p class="muted small">Autosaves every 10 seconds and when you close the tab. Offline progress is credited up to 16 hours.</p>`;
+    <div class="row" style="margin-top:8px">
+      ${btn('reset', 'Start a new company', { cls: 'btn danger', title: 'Ends this run without an exit. Founder Reputation, upgrades and run history are kept.' })}
+    </div>
+    <p class="muted small">Autosaves every 10 seconds and when you close the tab. Offline progress is credited up to 16 hours.</p>
+    <hr />
+    <h3>Reset all progress</h3>
+    <p class="muted small">For starting completely over. Deletes the company <b>and</b> all Founder progression -
+    reputation, upgrade levels, previous runs, permanent bonuses and unlocks - back to the exact state of a
+    first-ever player. UI preferences are not touched.</p>
+    <div class="row">${btn('reset-all', 'Reset all progress', { cls: 'btn danger' })}</div>`;
 }
 
 const labelFor = (k) => ({ employees: 'Employees', revenueDay: 'Revenue per day', productsLive: 'Products live', valuation: 'Valuation' }[k] || k);

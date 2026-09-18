@@ -149,3 +149,28 @@ test('prestige resets the advisory bench (a stated design decision)', () => {
   assert.equal(ensureAdvisors(next).hired.length, 0, 'a new company starts with an empty bench');
   assert.equal(advisorSlots(next), 0, 'and no advisor access before Seed');
 });
+
+test('a malformed hired list is repaired instead of breaking everything downstream', () => {
+  // A hand-edited, imported or older save can hold bare ids, junk entries or
+  // nothing at all. Everything downstream reads `hired[i].id`, so loading has to
+  // normalise it rather than trust it.
+  const s = game(311);
+  s.advisors = { hired: ['growth_hacker', null, {}, { id: 'not_a_real_advisor' }, { id: 'veteran_cto' }], slots: 9 };
+  const fixed = ensureAdvisors(s);
+  assert.deepEqual(hiredAdvisorIds(s), ['growth_hacker', 'veteran_cto'], 'kept the real ones, in order');
+  assert.ok(fixed.hired.every((h) => h && typeof h.id === 'string'));
+  assert.equal(fixed.hired[0].day, 0, 'a coerced entry still has a shape the UI can read');
+  for (const id of hiredAdvisorIds(s)) assert.ok(advisorById(id), `${id} exists`);
+  // And the repaired state still works: effects compute, no throw.
+  assert.doesNotThrow(() => computeMods(s));
+  assert.deepEqual(Object.keys(advisorMods(s)).length > 0, true);
+});
+
+test('junk hired data cannot leak into the office or the modifier bag', () => {
+  const s = game(312);
+  s.advisors = { hired: [{ id: 'ghost_advisor' }], slots: 2 };
+  ensureAdvisors(s);
+  assert.deepEqual(hiredAdvisorIds(s), [], 'an unknown advisor is dropped');
+  assert.deepEqual(advisorMods(s), {}, 'and contributes no effects');
+  assert.equal(advisorRetainerDay(s), 0, 'and no retainer');
+});

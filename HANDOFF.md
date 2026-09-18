@@ -242,6 +242,24 @@ tools/playtest-v2.mjs        NEW  browser playtest for this pass
 test/exploits|roadmaps|advisors|acquisitions|goals|event-cadence|migration.test.js  NEW
 ```
 
+## Full reset
+
+`resetAllProgress()` in `src/sim/save.js` is the one authoritative way to start
+completely over, reached from **Company → Reset all progress**. It clears every
+progress key (live save, corrupt-save recovery copy, single-tab claim, and anything
+an older build stored under the game's prefix), rebuilds the state with the same
+constructor a first-ever load uses, persists it once with a fresh clock, and returns
+the keys it removed. UI preferences live under a separate prefix and survive.
+
+`test/reset-all.test.js` covers the reported-exploit shape: reputation and every
+upgrade level back to zero, run history and unlocks empty, a Solo Founder at 100%
+equity with the 15000 starter cash, empty advisors/goals/acquisitions/roadmaps, a
+reload that stays clean, offline catch-up that cannot re-credit deleted progress, a
+second reset that is safe, and a field-for-field comparison against `newGame()` so a
+future addition cannot be forgotten by the reset. `tools/playtest-reset.mjs` drives
+the same path in Chromium from a maxed-out save and verifies the storage keys,
+including that a preference key is left alone.
+
 ## Known issues / unverified behaviour
 
 - Balance beyond the second run is still inferred: `npm run balance` simulates one

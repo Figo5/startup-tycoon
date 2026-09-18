@@ -17,6 +17,12 @@ import { clamp, sum } from './util.js';
 export function ensureAdvisors(state) {
   if (!state.advisors || typeof state.advisors !== 'object') state.advisors = emptyAdvisors();
   if (!Array.isArray(state.advisors.hired)) state.advisors.hired = [];
+  // Keep only entries that name a real advisor. A hand-edited, imported or
+  // older save can carry bare ids or junk here, and everything downstream
+  // (effects, slots, the office sprite) reads `hired[i].id`.
+  state.advisors.hired = state.advisors.hired
+    .map((h) => (typeof h === 'string' ? { id: h, day: 0 } : h))
+    .filter((h) => h && typeof h.id === 'string' && ADVISORS.some((a) => a.id === h.id));
   return state.advisors;
 }
 
