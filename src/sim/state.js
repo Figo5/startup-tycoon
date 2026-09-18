@@ -7,7 +7,7 @@ import { OFFICE_TIERS } from '../data/office.js';
 import { SCENARIOS, PRESTIGE_UPGRADES } from '../data/prestige.js';
 import { stageOrder } from '../data/stages.js';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const REAL_SECONDS_PER_DAY = 120;   // 1 game day = 2 real minutes
 export const OFFLINE_CAP_HOURS = 16;
 export const MAX_OFFLINE_DAYS = (OFFLINE_CAP_HOURS * 3600) / REAL_SECONDS_PER_DAY;
@@ -23,16 +23,63 @@ export function emptyMeta() {
     lifetimeRep: 0,
     runs: [],               // {company, exit, value, rep, days, stage}
     upgrades: {},           // id -> level
+    appliedTx: [],          // recent purchase transaction ids, so none can be replayed
     unlockedScenarios: ['standard'],
     achievements: []
   };
 }
 
+export function emptyAdvisors() {
+  return { hired: [], slots: 1 };
+}
+
+export function emptyGoals() {
+  return { offered: [], active: null, completed: [], offeredDay: -1 };
+}
+
+export function emptyAcquisitions() {
+  return { targets: [], completed: [], integrationUntil: 0, assets: [] };
+}
+
+export function emptyRoadmap() {
+  // `auto` is opt-in: a manager only plans work once the player asks for it,
+  // because automatic initiatives otherwise act as a free multiplier.
+  return { active: null, history: [], auto: false };
+}
+
+/**
+ * Makes a meta bag safe to spend from. Clamps every level into its configured
+ * [0, max] range, forbids a negative or non-finite reputation balance, and keeps
+ * the applied-transaction ledger. Mutates and returns the same object so
+ * references held by the UI stay valid.
+ */
+export function normalizeMeta(meta) {
+  const m = (meta && typeof meta === 'object') ? meta : emptyMeta();
+  const num = (v, fallback = 0) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
+  m.version = SAVE_VERSION;
+  m.founderRep = Math.max(0, num(m.founderRep));
+  m.lifetimeRep = Math.max(0, num(m.lifetimeRep));
+  m.runs = Array.isArray(m.runs) ? m.runs.filter((r) => r && typeof r === 'object').slice(0, 25) : [];
+  m.achievements = Array.isArray(m.achievements) ? m.achievements.filter((a) => typeof a === 'string') : [];
+  m.appliedTx = Array.isArray(m.appliedTx) ? m.appliedTx.filter((t) => typeof t === 'string').slice(-50) : [];
+  m.unlockedScenarios = Array.isArray(m.unlockedScenarios) ? m.unlockedScenarios.filter((s) => typeof s === 'string') : [];
+  if (!m.unlockedScenarios.includes('standard')) m.unlockedScenarios.unshift('standard');
+  const levels = {};
+  for (const up of PRESTIGE_UPGRADES) {
+    const raw = Number(m.upgrades?.[up.id]);
+    levels[up.id] = clamp(Number.isFinite(raw) ? Math.floor(raw) : 0, 0, up.max);
+  }
+  m.upgrades = levels;
+  return m;
+}
+
 export function metaEffects(meta) {
   const e = {};
   const add = (k, v) => { e[k] = (e[k] || 0) + v; };
+  const m = meta && typeof meta === 'object' ? meta : {};
   for (const up of PRESTIGE_UPGRADES) {
-    const lvl = meta?.upgrades?.[up.id] || 0;
+    const raw = Number(m.upgrades?.[up.id]);
+    const lvl = clamp(Number.isFinite(raw) ? Math.floor(raw) : 0, 0, up.max);
     if (!lvl) continue;
     for (const [k, v] of Object.entries(up.effect)) {
       if (typeof v === 'number') add(k, v * lvl);
@@ -103,6 +150,10 @@ export function makeProduct(rng, categoryId, name) {
     priority: 1,            // 0.5 low / 1 normal / 2 high
     projects: [],
     completed: [],
+    // A product roadmap: one initiative at a time, `history` gates one-time ones.
+    roadmap: emptyRoadmap(),
+    // Roadmap effects that have no existing home on the product record.
+    acqMul: 0, revMul: 0, churnMul: 0, convMul: 0,
     revenueDay: 0,
     churnDay: 0,
     growthDay: 0,
@@ -123,7 +174,7 @@ export function makeProject(product, type) {
 }
 
 export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Untitled Inc.' } = {}) {
-  const m = meta || emptyMeta();
+  const m = normalizeMeta(meta || emptyMeta());
   const fx = metaEffects(m);
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
   const rng = makeRng(seed ?? (Date.now() & 0x7fffffff));
@@ -158,6 +209,7 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
       reputation: 1 + (fx.startReputation || 0),
       cash: 15000 + (fx.startCash || 0),
       founderEquity: 1,
+      ownership: { soldTotal: 0, transactions: [] },
       totalRaised: 0,
       marketingBudget: 0,
       lifetimeRevenue: 0,
@@ -176,6 +228,7 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     competitors: COMPETITORS.map((c) => ({
       id: c.id,
       name: c.name,
+      blurb: c.blurb,
       strength: clamp(c.strength * (1 + (scenario.mods?.competitorStrength || 0)), 0.05, 1.2),
       cash: c.cash,
       markets: c.markets.slice(),
@@ -183,7 +236,11 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
       shares: Object.fromEntries(c.markets.map((mk) => [mk, c.strength * 0.25])),
       acquired: false
     })),
-    events: { pending: [], cooldown: 1.5, log: [], seen: {} },
+    events: { pending: [], cooldown: 1.5, log: [], seen: {}, lastEventId: null, recentCats: [] },
+    advisors: emptyAdvisors(),
+    goals: emptyGoals(),
+    acquisitions: emptyAcquisitions(),
+    exitResult: null,
     boosts: [],
     stats: {
       revenueDay: 0, expenseDay: 0, payrollDay: 0, infraDay: 0, marketingDay: 0, rentDay: 0,

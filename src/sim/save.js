@@ -1,5 +1,10 @@
-import { SAVE_VERSION, emptyMeta, newGame } from './state.js';
+import { SAVE_VERSION, emptyMeta, newGame, normalizeMeta, emptyRoadmap } from './state.js';
 import { getIdCounter, setIdCounter } from './util.js';
+import { normalizeEquity } from './equity.js';
+import { ensureAdvisors } from './advisors.js';
+import { ensureGoals } from './goals.js';
+import { ensureAcquisitions } from './acquisitions.js';
+import { COMPETITORS } from '../data/competitors.js';
 
 export const SAVE_KEY = 'startup-tycoon/save/v1';
 export const CORRUPT_KEY = 'startup-tycoon/corrupt';
@@ -51,8 +56,53 @@ const MIGRATIONS = {
     blob.state.stats.history = blob.state.stats.history || [];
     blob.version = 3;
     return blob;
+  },
+  // v3 -> v4: the transactional and feature pass. Every step is additive and
+  // idempotent, and nothing is retroactively awarded: an existing save gets the
+  // new state containers empty, not filled in.
+  3: (blob) => {
+    const s = blob.state;
+    applyRunDefaults(s);
+    blob.meta = normalizeMeta(blob.meta || emptyMeta());
+    blob.version = 4;
+    return blob;
   }
 };
+
+/**
+ * Fills in anything a run state should have, without ever granting progress.
+ * Safe to run on every load: it only creates empty containers and repairs
+ * out-of-range numbers.
+ */
+export function applyRunDefaults(s) {
+  s.company = s.company || {};
+  s.company.founderEquity = normalizeEquity(s.company.founderEquity);
+  if (!s.company.ownership || typeof s.company.ownership !== 'object') {
+    s.company.ownership = { soldTotal: 1 - s.company.founderEquity, transactions: [] };
+  }
+  if (!Array.isArray(s.company.ownership.transactions)) s.company.ownership.transactions = [];
+  s.events = s.events || { pending: [], cooldown: 2, log: [], seen: {} };
+  if (!s.events.lastEventId) s.events.lastEventId = null;
+  if (!Array.isArray(s.events.recentCats)) s.events.recentCats = [];
+  if (s.exitResult === undefined) s.exitResult = null;
+  s.advisors = ensureAdvisors(s);
+  s.goals = ensureGoals(s);
+  s.acquisitions = ensureAcquisitions(s);
+  for (const p of s.products || []) {
+    if (!p.roadmap || typeof p.roadmap !== 'object') p.roadmap = emptyRoadmap();
+    if (!Array.isArray(p.roadmap.history)) p.roadmap.history = [];
+    for (const k of ['acqMul', 'revMul', 'churnMul', 'convMul']) {
+      if (!Number.isFinite(p[k])) p[k] = 0;
+    }
+  }
+  // Rivals saved before blurbs were stored keep their description.
+  for (const c of s.competitors || []) {
+    if (!c.blurb) c.blurb = COMPETITORS.find((x) => x.id === c.id)?.blurb || '';
+  }
+  // A settled run stays settled across a reload.
+  if (s.exitResult) s.time.paused = true;
+  return s;
+}
 
 export function migrate(blob) {
   let guard = 0;
@@ -69,7 +119,7 @@ export function hydrate(blob) {
   if (!v.ok) return { ok: false, reason: v.reason };
   const migrated = migrate(structuredClone(blob));
   const state = migrated.state;
-  state.meta = migrated.meta || emptyMeta();
+  state.meta = normalizeMeta(migrated.meta || emptyMeta());
   state.version = SAVE_VERSION;
   setIdCounter(migrated.idCounter || 1);
   // Defensive defaults for anything a future field might rely on.
@@ -77,8 +127,8 @@ export function hydrate(blob) {
   state.boosts = state.boosts || [];
   state.contracts = state.contracts || [];
   state.candidates = state.candidates || [];
-  state.events = state.events || { pending: [], cooldown: 2, log: [], seen: {} };
   state.stats.history = state.stats.history || [];
+  applyRunDefaults(state);
   return { ok: true, state, savedAt: migrated.savedAt };
 }
 
