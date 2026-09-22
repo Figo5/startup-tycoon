@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { newGame } from '../src/sim/state.js';
 import { serialize } from '../src/sim/save.js';
 
-const PW = process.env.PLAYWRIGHT_PATH || '/Users/giofiore/.hermes/hermes-agent/node_modules/playwright/index.mjs';
+const PW = process.env.PLAYWRIGHT_PATH || 'playwright';
 const { chromium } = await import(PW);
 
 const PORT = Number(process.env.PORT || 5201);

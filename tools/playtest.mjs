@@ -3,7 +3,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
-const PW = process.env.PLAYWRIGHT_PATH || '/Users/giofiore/.hermes/hermes-agent/node_modules/playwright/index.mjs';
+const PW = process.env.PLAYWRIGHT_PATH || 'playwright';
 const { chromium } = await import(PW);
 
 const PORT = 5199;

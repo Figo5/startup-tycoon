@@ -11,7 +11,7 @@ import { serialize } from '../src/sim/save.js';
 import { PRESTIGE_UPGRADES } from '../src/data/prestige.js';
 import { ACQUISITION_POOL } from '../src/data/acquisitions.js';
 
-const PW = process.env.PLAYWRIGHT_PATH || '/Users/giofiore/.hermes/hermes-agent/node_modules/playwright/index.mjs';
+const PW = process.env.PLAYWRIGHT_PATH || 'playwright';
 const { chromium } = await import(PW);
 
 const PORT = Number(process.env.PORT || 5203);

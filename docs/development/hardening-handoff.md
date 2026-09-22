@@ -1,3 +1,5 @@
+> Historical report: counts and screenshot paths refer to the original pass. See [evidence index](README.md) and the [current README](../../README.md).
+
 # Handoff — Startup Tycoon (gameplay hardening + feature pass)
 
 Factual state of the build after the hardening/feature pass. Numbers here come from

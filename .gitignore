@@ -3,3 +3,9 @@ dist/
 .DS_Store
 *.log
 shots/
+
+# Generated QA captures and local configuration
+shots-v2/
+shots-reset/
+.env
+.env.*
