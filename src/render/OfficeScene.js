@@ -69,7 +69,7 @@ export default class OfficeScene extends Phaser.Scene {
     })).setScrollFactor(0).setDepth(100).setVisible(false);
 
     // Late-night lighting while the company is crunching. One rectangle, no shaders.
-    this.nightShade = this.add.rectangle(0, 0, 10, 10, 0x0a0820, 0).setOrigin(0, 0).setScrollFactor(0).setDepth(90);
+    this.nightShade = this.add.rectangle(0, 0, 10, 10, 0x0a0820, 0).setOrigin(0, 0).setScrollFactor(0).setDepth(90).setVisible(false);
 
     this.scale.on('resize', () => this.time.delayedCall(40, () => this.clampCamera()));
     const st = this.game$.state;
@@ -399,6 +399,8 @@ export default class OfficeScene extends Phaser.Scene {
     this.nightShade.setSize(w, h);
     const target = state.company.pace === 'crunch' ? 0.22 : 0;
     this.nightShade.fillAlpha += (target - this.nightShade.fillAlpha) * 0.3;
+    // A full-screen rectangle costs a full-screen fill even when transparent.
+    this.nightShade.setVisible(this.nightShade.fillAlpha > 0.01);
   }
 
   chooseAdvisorDestination(agent) {
