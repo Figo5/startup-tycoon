@@ -61,6 +61,10 @@ function award(state, a, log) {
 export function tickAchievements(state, log) {
   if (!state.meta || state.exitResult) return;
   if (!state.flags) state.flags = { unlocked: [] };
+  // Four checks a game day is plenty, and keeps a 16-hour offline catch-up cheap.
+  const last = state.flags.achievementCheck ?? -1;
+  if (state.time.day - last < 0.25 && state.time.day >= last) return;
+  state.flags.achievementCheck = state.time.day;
   if (!state.flags.allSynergies && activeSynergies(state).every((s) => s.active)) state.flags.allSynergies = true;
   for (const a of ACHIEVEMENTS) {
     if (!a.check || has(state.meta, a.id)) continue;
