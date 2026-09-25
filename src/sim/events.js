@@ -1,12 +1,13 @@
-import { EVENTS, eventById } from '../data/events.js';
+import { EVENTS, eventById, TRIGGERS, choiceLabel } from '../data/events.js';
 import { stageOrder } from '../data/stages.js';
 import { clamp, uid, sum } from './util.js';
 import { rnd, chance, perDay, pick, range, weighted } from './rng.js';
 import { addBoost } from './modifiers.js';
 import { liveProducts, totalCustomers, queueProject, suggestProject } from './products.js';
-import { makeCandidate, refreshCandidates } from './state.js';
+import { makeCandidate, refreshCandidates, addStory, applyTraits, traitList } from './state.js';
+import { traitById } from '../data/traits.js';
 import { addContract } from './economy.js';
-import { removeEmployee, marketSalary } from './workforce.js';
+import { removeEmployee, marketSalary, sendOnLeave, recordAlumnus, fairSalary } from './workforce.js';
 import { startOutage } from './infra.js';
 import { diluteFounder } from './equity.js';
 
@@ -45,6 +46,7 @@ export function eligibleEvents(state) {
   return EVENTS.filter((e) => {
     if (e.minStage && order < stageOrder(e.minStage)) return false;
     if (e.maxStage && order > stageOrder(e.maxStage)) return false;
+    if (e.chainOnly || e.trigger) return false;
     if (state.events.pending.some((p) => p.eventId === e.id)) return false;
     if (e.cond && !e.cond(state)) return false;
     return true;
@@ -52,6 +54,8 @@ export function eligibleEvents(state) {
 }
 
 function subjectFor(state, def) {
+  // Newer events pick their own subject: a person, a rival, a product.
+  if (typeof def.subject === 'function') return def.subject(state) || null;
   if (def.id === 'resignation' || def.id === 'poaching') {
     const staff = state.employees.filter((e) => e.id !== 'founder');
     return staff.length ? pick(state.rng, staff).name : 'One of your team';
@@ -63,15 +67,19 @@ function subjectFor(state, def) {
   return null;
 }
 
-export function spawnEvent(state, eventId) {
+export function spawnEvent(state, eventId, opts = null) {
   const def = eventById(eventId);
   if (!def) return null;
+  let subj = opts || subjectFor(state, def);
+  if (typeof subj === 'string') subj = { name: subj };
   const pending = {
     id: uid('evt'),
     eventId,
     day: state.time.day,
     expiresDay: state.time.day + (def.expires || 3),
-    subject: subjectFor(state, def)
+    subject: subj?.name ?? null,
+    subjectId: subj?.id ?? null,
+    data: subj?.data ?? null
   };
   state.events.pending.push(pending);
   state.events.seen[eventId] = (state.events.seen[eventId] || 0) + 1;
@@ -106,13 +114,40 @@ export function pickEvent(state, cadence) {
 export function eventText(state, pending) {
   const def = eventById(pending.eventId);
   state.pendingEventSubject = pending.subject;
-  const t = def.text ? def.text(state) : '';
-  state.pendingEventSubject = null;
+  state.pendingEvent = pending;
+  let t = '';
+  try { t = def.text ? def.text(state, pending) : ''; } finally {
+    state.pendingEventSubject = null;
+    state.pendingEvent = null;
+  }
   return t;
 }
 
-export function choiceCost(state, choice) {
-  return typeof choice.cost === 'function' ? Math.round(choice.cost(state)) : (choice.cost || 0);
+/** Choices can be hidden when they make no sense right now (`show`). */
+export function visibleChoices(state, def, pending) {
+  return def.choices.filter((c) => !c.show || c.show(state, pending));
+}
+
+/** Runs `fn` with the event's subject in scope, for text, labels and costs. */
+export function withPending(state, pending, fn) {
+  const prevS = state.pendingEventSubject;
+  const prevP = state.pendingEvent;
+  state.pendingEventSubject = pending?.subject ?? null;
+  state.pendingEvent = pending || null;
+  try { return fn(); } finally {
+    state.pendingEventSubject = prevS;
+    state.pendingEvent = prevP;
+  }
+}
+
+export function choiceCost(state, choice, pending = null) {
+  if (typeof choice.cost !== 'function') return choice.cost || 0;
+  const v = pending ? withPending(state, pending, () => choice.cost(state)) : choice.cost(state);
+  return Math.round(Number.isFinite(v) ? v : 0);
+}
+
+export function labelFor(state, choice, pending) {
+  return withPending(state, pending, () => choiceLabel(state, choice));
 }
 
 export function resolveEvent(state, mods, pendingId, choiceId, log, extra = {}) {
@@ -122,23 +157,58 @@ export function resolveEvent(state, mods, pendingId, choiceId, log, extra = {}) 
   const def = eventById(pending.eventId);
   const choice = def.choices.find((c) => c.id === choiceId);
   if (!choice) return { ok: false, reason: 'Unknown choice.' };
-  const cost = choiceCost(state, choice);
+  const cost = choiceCost(state, choice, pending);
   if (cost > state.company.cash) return { ok: false, reason: 'Not enough cash.' };
+  const label = labelFor(state, choice, pending);
 
   state.events.pending.splice(i, 1);
   state.company.cash -= cost;
   state.pendingEventSubject = pending.subject;
+  state.pendingEvent = pending;
 
   const api = makeApi(state, mods, log, pending, extra);
-  if (choice.apply) choice.apply({ state, mods, api, pending, extra });
-  state.pendingEventSubject = null;
-  state.events.log.unshift({ day: state.time.day, title: def.title, choice: choice.label });
+  try {
+    if (choice.apply) choice.apply({ state, mods, api, pending, extra });
+  } finally {
+    state.pendingEventSubject = null;
+    state.pendingEvent = null;
+  }
+  state.events.log.unshift({ day: state.time.day, title: def.title, choice: label });
   state.events.log = state.events.log.slice(0, 60);
   return { ok: true, cost };
 }
 
+/** Follow-ups scheduled by earlier choices, plus reactions to things that just happened. */
+function tickScheduled(state, log) {
+  const ev = state.events;
+  if (!Array.isArray(ev.scheduled)) ev.scheduled = [];
+  const due = ev.scheduled.filter((x) => x.day <= state.time.day);
+  for (const x of due) {
+    if (ev.pending.length >= MAX_UNRESOLVED) break;
+    ev.scheduled = ev.scheduled.filter((y) => y !== x);
+    const def = eventById(x.eventId);
+    if (!def) continue;
+    if (def.cond && !def.cond(state, x)) continue;
+    spawnEvent(state, x.eventId, { name: x.subject, id: x.subjectId, data: x.data });
+    log?.(`Event: ${def.title}`, 'event');
+  }
+  for (const t of TRIGGERS) {
+    if (ev.pending.length >= MAX_UNRESOLVED) break;
+    if (ev.pending.some((p) => p.eventId === t.event)) continue;
+    const last = ev.lastTriggered?.[t.event] ?? -999;
+    if (state.time.day - last < (t.cooldown || 20)) continue;
+    const opts = t.check(state);
+    if (!opts) continue;
+    if (!ev.lastTriggered) ev.lastTriggered = {};
+    ev.lastTriggered[t.event] = state.time.day;
+    spawnEvent(state, t.event, opts);
+    log?.(`Event: ${eventById(t.event).title}`, 'event');
+  }
+}
+
 export function tickEvents(state, mods, days, log) {
   const cadence = cadenceFor(state);
+  if (state.time.day > 1) tickScheduled(state, log);
   state.events.cooldown -= days;
   // Never bank a backlog: without this floor, a full inbox quietly accrues
   // negative cooldown and then empties itself all at once.
@@ -155,10 +225,11 @@ export function tickEvents(state, mods, days, log) {
   for (const p of state.events.pending.slice()) {
     if (state.time.day < p.expiresDay) continue;
     const def = eventById(p.eventId);
-    const auto = def.choices.find((c) => c.id === def.auto) || def.choices[def.choices.length - 1];
-    const affordable = (c) => !c.minigame && choiceCost(state, c) <= state.company.cash;
+    const shown = visibleChoices(state, def, p);
+    const auto = shown.find((c) => c.id === def.auto) || shown[shown.length - 1] || def.choices[def.choices.length - 1];
+    const affordable = (c) => !c.minigame && choiceCost(state, c, p) <= state.company.cash;
     const choice = affordable(auto) ? auto
-      : def.choices.filter(affordable).sort((a, b) => choiceCost(state, a) - choiceCost(state, b))[0];
+      : shown.filter(affordable).sort((a, b) => choiceCost(state, a, p) - choiceCost(state, b, p))[0];
     if (choice) { resolveEvent(state, mods, p.id, choice.id, log); continue; }
     // Every option costs more than the company has. Let it lapse rather than
     // leave it pending forever, holding an inbox slot against the cap.
@@ -175,6 +246,7 @@ function makeApi(state, mods, log, pending, extra) {
   return {
     note,
     chance: (p) => chance(state.rng, p),
+    rand: (a, b) => range(state.rng, a, b),
     addCash: (v) => { state.company.cash += v; },
     spend: (v) => { state.company.cash = Math.max(0, state.company.cash - v); },
     addReputation: (v) => { state.company.reputation = clamp(state.company.reputation + v, 0.2, 60); },
@@ -236,6 +308,71 @@ function makeApi(state, mods, log, pending, extra) {
       for (const c of state.competitors) for (const mk of c.markets) c.shares[mk] = clamp((c.shares[mk] || 0) - v, 0, 0.6);
     },
     halveMarketing: () => { state.company.marketingBudget = Math.round(state.company.marketingBudget * 0.5); },
+    // --- people -----------------------------------------------------------
+    employee: () => state.employees.find((x) => x.id === pending.subjectId)
+      || state.employees.find((x) => x.name === pending.subject) || null,
+    employeeById: (id) => state.employees.find((x) => x.id === id) || null,
+    story: (e, text) => addStory(e, state.time.day, text),
+    moraleOf: (e, v) => { if (e) e.morale = clamp(e.morale + v, 0, 1.1); },
+    energy: (v) => { for (const e of state.employees) e.energy = clamp((e.energy ?? 0.9) + v, 0, 1); },
+    energyOf: (e, v) => { if (e) e.energy = clamp((e.energy ?? 0.9) + v, 0, 1); },
+    leave: (e, d = 5) => (e ? sendOnLeave(state, e.id, d) : null),
+    raiseOf: (e, pct) => { if (e && e.salary > 0) { e.salary = Math.round(e.salary * (1 + pct)); e.promotedDay = state.time.day; } },
+    addTrait: (e, id) => {
+      if (!e || !traitById(id)) return false;
+      if (!Array.isArray(e.traits)) e.traits = [];
+      if (e.traits.includes(id) || e.traits.length >= 2) return false;
+      e.traits.push(id);
+      return true;
+    },
+    lose: (e, rival = null) => {
+      if (!e || e.id === 'founder') return;
+      removeEmployee(state, e.id);
+      recordAlumnus(state, e, rival ? `joined ${rival.name}` : 'resigned');
+      if (rival) { rival.strength = clamp(rival.strength + 0.03, 0.02, 1.2); rival.rivalry = clamp((rival.rivalry || 0) + 0.1, 0, 1); }
+      log?.(`${e.name} left the company${rival ? ` for ${rival.name}` : ''}.`, 'bad');
+    },
+    candidate: (opts = {}) => {
+      const roles = opts.role ? [opts.role] : null;
+      const c = makeCandidate(state.rng, opts.role || (roles ? roles[0] : pick(state.rng, ['engineer', 'senior_engineer', 'designer', 'marketer', 'sales_rep'])), {
+        hiredDay: state.time.day, star: !!opts.star, stage: stageOrder(state.company.stage), referral: !!opts.referral
+      });
+      if (opts.trait) applyTraits(c, [opts.trait, ...(c.traits || []).filter((t) => t !== opts.trait)].slice(0, opts.star ? 2 : 1));
+      if (opts.name) c.name = opts.name;
+      if (opts.skill) c.skill = Math.round(Math.min(12, opts.skill) * 10) / 10;
+      if (opts.salaryMul) c.salary = Math.round((c.salary * opts.salaryMul) / 500) * 500;
+      if (opts.referral) c.signingBonus = 0;
+      if (opts.traits) c.traits = opts.traits.slice(0, 2);
+      c.expiresDay = state.time.day + (opts.days || 8);
+      state.candidates.push(c);
+      return c;
+    },
+    setPace: (id) => { if (['relaxed', 'normal', 'crunch'].includes(id)) state.company.pace = id; },
+    // --- products ---------------------------------------------------------
+    product: () => state.products.find((x) => x.id === pending.data?.productId) || biggest(),
+    hype: (p, acq, d, label = 'Buzz') => {
+      if (!p) return;
+      const cur = p.hype && p.hype.until > state.time.day ? p.hype : null;
+      p.hype = { until: Math.max(cur?.until || 0, state.time.day + d), acq: Math.max(cur?.acq || 0, acq), label };
+    },
+    queueOn: (p, typeId) => (p ? queueProject(state, mods, p.id, typeId) : { ok: false }),
+    discountCategory: (cat, pct, d) => { state.productDiscount = { cat, pct, until: state.time.day + d }; },
+    // --- rivals and follow-ups -------------------------------------------
+    rival: () => state.competitors.find((x) => x.id === pending.data?.rivalId) || null,
+    rivalHit: (r, strength, share = 0) => {
+      if (!r) return;
+      r.strength = clamp(r.strength + strength, 0.02, 1.2);
+      if (share) for (const mk of r.markets) r.shares[mk] = clamp((r.shares[mk] || 0) + share, 0, 0.5);
+      if (strength < 0) r.valuation *= 1 + strength;
+    },
+    chain: (eventId, d, opts = {}) => {
+      if (!Array.isArray(state.events.scheduled)) state.events.scheduled = [];
+      state.events.scheduled.push({
+        eventId, day: state.time.day + d,
+        subject: opts.subject ?? pending.subject, subjectId: opts.subjectId ?? pending.subjectId,
+        data: opts.data ?? pending.data
+      });
+    },
     // Ownership always moves through the one transaction path.
     dilute: (pct, source = 'event') => diluteFounder(state, pct, source)
   };

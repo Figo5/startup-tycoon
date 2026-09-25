@@ -96,6 +96,8 @@ export function applyRunDefaults(s) {
   s.events = s.events || { pending: [], cooldown: 2, log: [], seen: {} };
   if (!s.events.lastEventId) s.events.lastEventId = null;
   if (!Array.isArray(s.events.recentCats)) s.events.recentCats = [];
+  if (!Array.isArray(s.events.scheduled)) s.events.scheduled = [];
+  if (!s.events.lastTriggered || typeof s.events.lastTriggered !== 'object') s.events.lastTriggered = {};
   if (s.exitResult === undefined) s.exitResult = null;
   s.advisors = ensureAdvisors(s);
   s.goals = ensureGoals(s);

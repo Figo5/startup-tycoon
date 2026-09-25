@@ -313,7 +313,9 @@ export { CLASS_ORDER, CLASS_CHURN };
 
 export function productCost(categoryId, state) {
   const cat = categoryById(categoryId);
-  return Math.round(cat.mvpWork * 120 * (1 + state.products.length * 0.25));
+  const d = state.productDiscount;
+  const disc = d && d.cat === categoryId && d.until > state.time.day ? 1 - d.pct : 1;
+  return Math.round(cat.mvpWork * 120 * (1 + state.products.length * 0.25) * disc);
 }
 
 export function availableCategories(state, mods) {

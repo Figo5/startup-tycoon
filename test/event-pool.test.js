@@ -23,7 +23,7 @@ function bare(stage = 'late', seed = 70) {
 const ids = (s) => eligibleEvents(s).map((e) => e.id);
 
 test('the event pool is large, unique and well formed', () => {
-  assert.ok(EVENTS.length >= 40 && EVENTS.length <= 50, `pool size ${EVENTS.length}`);
+  assert.ok(EVENTS.length >= 90 && EVENTS.length <= 130, `pool size ${EVENTS.length}`);
   assert.equal(new Set(EVENTS.map((e) => e.id)).size, EVENTS.length, 'duplicate event ids');
   // market_boom is a pre-existing pure-flavour notification, left as it was.
   const decisions = EVENTS.filter((e) => e.choices.length >= 2);

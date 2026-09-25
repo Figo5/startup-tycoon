@@ -654,4 +654,14 @@ export const EVENTS = [
   }
 ];
 
+import { DEPTH_EVENTS, TRIGGERS } from './events_depth.js';
+
+EVENTS.push(...DEPTH_EVENTS);
+export { TRIGGERS };
+
 export const eventById = (id) => EVENTS.find((e) => e.id === id);
+
+/** A choice label can depend on who the event is about. */
+export function choiceLabel(state, choice) {
+  return typeof choice.label === 'function' ? choice.label(state) : choice.label;
+}

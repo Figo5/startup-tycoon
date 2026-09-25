@@ -2,7 +2,7 @@ import { money, abbrev, pct, fmtDuration, clamp, uid } from '../sim/util.js';
 import { stageById } from '../data/stages.js';
 import { eventById } from '../data/events.js';
 import { PANELS, PANEL_TITLES, employeeCard, prestige } from './panels.js';
-import { eventText, choiceCost, resolveEvent } from '../sim/events.js';
+import { eventText, choiceCost, resolveEvent, visibleChoices, labelFor } from '../sim/events.js';
 import { hire, fire, promote, reassign, setManager, sendOnLeave, setPace, giveRaise } from '../sim/workforce.js';
 import { queueProject, createProduct, setApproach, sellProduct, productSalePrice } from '../sim/products.js';
 import { startResearch, cancelResearch } from '../sim/research.js';
@@ -101,11 +101,11 @@ export function createUI(app) {
       return `<div class="tile event-card">
         <h3>${escapeHtml(def.title)}<span class="tag">${fmtDuration(left)} left</span></h3>
         <p>${escapeHtml(eventText(s, p))}</p>
-        ${def.choices.map((c) => {
-          const cost = choiceCost(s, c);
+        ${visibleChoices(s, def, p).map((c) => {
+          const cost = choiceCost(s, c, p);
           const poor = cost > s.company.cash;
           return `<button class="choice" data-act="event" data-id="${p.id}|${c.id}"${poor ? ' disabled' : ''}>
-            <b>${escapeHtml(c.label)}${cost ? ` — ${money(cost)}` : ''}${c.minigame ? ' ▶' : ''}</b>
+            <b>${escapeHtml(labelFor(s, c, p))}${cost ? ` — ${money(cost)}` : ''}${c.minigame ? ' ▶' : ''}</b>
             ${escapeHtml(c.desc || (c.minigame ? MINIGAMES[c.minigame].blurb : ''))}${poor ? ' (not enough cash)' : ''}</button>`;
         }).join('')}
       </div>`;
@@ -193,7 +193,7 @@ export function createUI(app) {
         if (choice?.minigame) {
           const score = await runMinigame(choice.minigame);
           applyMinigameReward(s, mods, choice.minigame, score, pending);
-          const fallback = def.choices.find((c) => !c.minigame && choiceCost(s, c) <= s.company.cash) || def.choices[0];
+          const fallback = def.choices.find((c) => !c.minigame && choiceCost(s, c, pending) <= s.company.cash) || def.choices[0];
           done(resolveEvent(s, mods, pid, fallback.id, app.log));
         } else {
           done(resolveEvent(s, mods, pid, cid, app.log));

@@ -299,7 +299,7 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     contracts: [],
     competitors: COMPETITORS.map((c) => makeRival(c, scenario.mods || {})),
     rivalState: { nemesis: null, wars: [], passed: [] },
-    events: { pending: [], cooldown: 1.5, log: [], seen: {}, lastEventId: null, recentCats: [] },
+    events: { pending: [], cooldown: 1.5, log: [], seen: {}, lastEventId: null, recentCats: [], scheduled: [], lastTriggered: {} },
     advisors: emptyAdvisors(),
     goals: emptyGoals(),
     acquisitions: emptyAcquisitions(),
