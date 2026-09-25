@@ -1,11 +1,13 @@
 import { clamp, sum } from './util.js';
-import { chance, perDay } from './rng.js';
-import { categoryById, projectTypeById, PROJECT_TYPES, PRODUCT_CATEGORIES, CUSTOMER_CLASSES } from '../data/products.js';
+import { chance, perDay, pick } from './rng.js';
+import { categoryById, projectTypeById, PROJECT_TYPES, PRODUCT_CATEGORIES, CUSTOMER_CLASSES, approachById, APPROACHES } from '../data/products.js';
 import { stageOrder } from '../data/stages.js';
 import { mul, flat, has } from './modifiers.js';
 import { prioritySplit } from './workforce.js';
-import { makeProject, makeProduct } from './state.js';
+import { makeProject, makeProduct, PRODUCT_NAMES } from './state.js';
 import { acquiredSupportLoad } from './acquisitions.js';
+import { trendMarketMul } from './market.js';
+import { priceWarChurn } from './competitors.js';
 
 const CLASS_ORDER = ['consumer', 'smb', 'midmarket', 'enterprise'];
 const CLASS_CHURN = { consumer: 1.0, smb: 0.7, midmarket: 0.45, enterprise: 0.25 };
@@ -29,7 +31,8 @@ export function marketCap(state, mods, product) {
   const siblings = state.products.filter((p) => p.category === product.category && p.stage === 'live').length || 1;
   const cannibal = 1 / Math.pow(Math.max(1, siblings), 0.75);
   return cat.marketBase * rep * mods.stageMarketMul * mul(mods, 'marketSize')
-    * (1 + product.marketBonus) * (1 - rivalPressure(state, product.category)) * cannibal;
+    * (1 + product.marketBonus) * (1 - rivalPressure(state, product.category)) * cannibal
+    * trendMarketMul(state, product.category);
 }
 
 export function supportCoverage(state, mods, wf) {
@@ -91,8 +94,9 @@ export function applyProjectEffects(state, mods, p, prj) {
   const type = projectTypeById(prj.typeId);
   if (!type) return;
   const e = type.effects || {};
+  const ap = approachById(prj.approach);
   const gainMul = mul(mods, 'projectQuality');
-  const debtMul = e.debt > 0 ? mul(mods, 'debtRate', -0.85) : 1;
+  const debtMul = e.debt > 0 ? mul(mods, 'debtRate', -0.85) * ap.debtMul : 1;
 
   if (e.launch) {
     p.stage = 'live';
@@ -100,7 +104,13 @@ export function applyProjectEffects(state, mods, p, prj) {
     const cat = categoryById(p.category);
     p.users = cat.seedUsers * Math.pow(Math.max(0.3, state.company.reputation), 0.6);
   }
-  if (e.quality) p.quality = clamp(p.quality + e.quality * gainMul, 0, 1);
+  if (e.quality) p.quality = clamp(p.quality + e.quality * gainMul * ap.quality, 0, 1);
+  if (ap.debtAdd && type.id !== 'refactor') p.techDebt = clamp(p.techDebt + ap.debtAdd, 0, 3);
+  if (e.majorVersion) {
+    p.version = Math.floor(p.version) + 1;
+    p.featuresSinceMajor = 0;
+  }
+  if (type.id === 'feature' || type.id === 'aifeature') p.featuresSinceMajor = (p.featuresSinceMajor || 0) + 1;
   if (e.reliability) p.reliability = clamp(p.reliability + e.reliability, 0, 1);
   if (e.debt) p.techDebt = clamp(p.techDebt + e.debt * debtMul, 0, 3);
   if (e.version) p.version = Math.round((p.version + e.version) * 10) / 10;
@@ -120,7 +130,40 @@ export function projectAvailable(state, mods, p, type) {
   const req = type.requires;
   if (req?.stage && stageOrder(state.company.stage) < stageOrder(req.stage)) return false;
   if (req?.research && !state.research.completed.includes(req.research)) return false;
+  if (req?.featuresSinceMajor && (p.featuresSinceMajor || 0) < req.featuresSinceMajor) return false;
   return true;
+}
+
+export function setApproach(state, productId, approachId) {
+  const p = state.products.find((x) => x.id === productId);
+  if (!p) return { ok: false, reason: 'Unknown product.' };
+  if (!APPROACHES.some((a) => a.id === approachId)) return { ok: false, reason: 'Unknown approach.' };
+  p.approach = approachId;
+  return { ok: true };
+}
+
+/** What a buyer would pay for a live product line right now. */
+export function productSalePrice(state, p) {
+  if (p.stage !== 'live') return 0;
+  return Math.round(Math.max(20000, p.revenueDay * 320 + p.users * 0.6));
+}
+
+/**
+ * Sell a product line outright: cash now, a free slot, and the customers go
+ * with it. The team stays. A company always keeps at least one product.
+ */
+export function sellProduct(state, productId, log) {
+  const p = state.products.find((x) => x.id === productId);
+  if (!p) return { ok: false, reason: 'Unknown product.' };
+  if (p.stage !== 'live') return { ok: false, reason: 'Only a live product has buyers.' };
+  if (state.products.length < 2) return { ok: false, reason: 'You cannot sell your only product.' };
+  const price = productSalePrice(state, p);
+  state.products = state.products.filter((x) => x.id !== productId);
+  state.company.cash += price;
+  if (!Array.isArray(state.soldProducts)) state.soldProducts = [];
+  state.soldProducts.push({ name: p.name, category: p.category, price, day: Math.floor(state.time.day) });
+  log?.(`Sold ${p.name} for $${Math.round(price).toLocaleString()}.`, 'good');
+  return { ok: true, price, name: p.name };
 }
 
 export function queueProject(state, mods, productId, typeId) {
@@ -143,6 +186,9 @@ export function suggestProject(state, mods, p) {
   if (p.reliability < 0.78) return pickBy('reliability') || avail[0] || null;
   const infraTight = state.infra.load > state.infra.capacity * 0.85;
   if (infraTight) { const perf = pickBy('performance'); if (perf) return perf; }
+  // A relaunch is always worth doing once it is on the table.
+  const major = pickBy('major');
+  if (major && p.techDebt < 0.9) return major;
   if (split > 0.65) return pickBy('reliability') || pickBy('refactor') || pickBy('security') || avail[0] || null;
   if (split < 0.35) return pickBy('feature') || pickBy('aifeature') || avail[0] || null;
   const ent = has(mods, 'enterprise_features') ? pickBy('enterprise') : null;
@@ -194,7 +240,8 @@ export function tickProducts(state, mods, wf, days, log) {
     const diminish = 1 / (1 + spend / Math.max(250, cap * 0.02));
     const paid = spend * cat.marketingUsers * marketingPower * diminish;
     const sold = (wf.out.sales || 0) * cat.salesPull * share * 0.6 * (0.7 + salesSplit * 0.6);
-    const growthGain = (1 + prodPower * 0.004 * (1 - prodSplit)) * (1 + (p.acqMul || 0));
+    const hyped = p.hype && p.hype.until > state.time.day ? p.hype.acq : 0;
+    const growthGain = (1 + prodPower * 0.004 * (1 - prodSplit)) * (1 + (p.acqMul || 0)) * (1 + hyped);
     const room = clamp(1 - p.users / cap, -0.5, 1);
     let gain = (organic * p.users * room + (paid + sold) * Math.max(0.05, room)) * growthGain;
     if (outage) gain *= 0.2;
@@ -208,6 +255,7 @@ export function tickProducts(state, mods, wf, days, log) {
       * (1 - covBonus * 0.5)
       * (1 - prodSplit * 0.18)
       * (1 + (p.churnMul || 0))
+      * (1 + priceWarChurn(state, p.category))
       * mul(mods, 'churn');
     if (coverage < 1) churnRate *= 1 + (1 - coverage) * 0.3;
     if (outage) churnRate *= 2.5;
@@ -297,7 +345,9 @@ export function createProduct(state, mods, categoryId, name) {
   if (!opt) return { ok: false, reason: 'Unknown category.' };
   if (!opt.available) return { ok: false, reason: opt.reason || 'Not available.' };
   state.company.cash -= opt.cost;
-  const p = makeProduct(state.rng, categoryId, name);
+  const used = new Set([...state.products.map((x) => x.name), ...(state.soldProducts || []).map((x) => x.name)]);
+  const fresh = PRODUCT_NAMES.filter((n) => !used.has(n));
+  const p = makeProduct(state.rng, categoryId, name || (fresh.length ? pick(state.rng, fresh) : undefined));
   p.projects.push(makeProject(p, projectTypeById('mvp')));
   state.products.push(p);
   return { ok: true, product: p };

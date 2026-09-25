@@ -3,8 +3,8 @@ import { stageById } from '../data/stages.js';
 import { eventById } from '../data/events.js';
 import { PANELS, PANEL_TITLES, employeeCard, prestige } from './panels.js';
 import { eventText, choiceCost, resolveEvent } from '../sim/events.js';
-import { hire, fire, promote, reassign, setManager } from '../sim/workforce.js';
-import { queueProject, createProduct } from '../sim/products.js';
+import { hire, fire, promote, reassign, setManager, sendOnLeave, setPace, giveRaise } from '../sim/workforce.js';
+import { queueProject, createProduct, setApproach, sellProduct, productSalePrice } from '../sim/products.js';
 import { startResearch, cancelResearch } from '../sim/research.js';
 import { raise } from '../sim/funding.js';
 import { upgradeOffice, buyRoom } from '../sim/office.js';
@@ -28,7 +28,7 @@ export const PANEL_ORDER = ['company', 'products', 'employees', 'departments', '
 // A purchase is refused if the same control is triggered again inside this
 // window. A double click is one interaction; it must buy one level.
 const REPEAT_GUARD_MS = 450;
-const PURCHASE_ACTIONS = new Set(['buy-prestige', 'room', 'office', 'new-product', 'research',
+const PURCHASE_ACTIONS = new Set(['sell-product', 'buy-prestige', 'room', 'office', 'new-product', 'research',
   'raise', 'acquire', 'acquire-company', 'advisor-hire', 'roadmap-start', 'hire']);
 
 export function createUI(app) {
@@ -48,7 +48,7 @@ export function createUI(app) {
   function pushFeed(text, kind = 'info') {
     const li = document.createElement('li');
     li.className = kind;
-    li.innerHTML = `<span class="tag">${kind === 'good' ? '+' : kind === 'bad' ? '!' : kind === 'stage' || kind === 'goal' ? '★' : kind === 'event' ? '◆' : '·'}</span><span>${escapeHtml(text)}</span>`;
+    li.innerHTML = `<span class="tag">${kind === 'good' ? '+' : kind === 'bad' ? '!' : kind === 'stage' || kind === 'goal' || kind === 'launch' ? '★' : kind === 'event' ? '◆' : kind === 'market' ? '▲' : kind === 'rival' ? '⚔' : '·'}</span><span>${escapeHtml(text)}</span>`;
     els.feed.prepend(li);
     while (els.feed.children.length > 80) els.feed.lastChild.remove();
   }
@@ -206,12 +206,10 @@ export function createUI(app) {
         if (!confirm(`Let ${e?.name} go? Severance is one month of salary and the team will notice.`)) return;
         done(fire(s, id)); hideOverlay(); break;
       }
-      case 'promote': done(promote(s, id)); break;
-      case 'give-raise': {
-        const e = s.employees.find((x) => x.id === id);
-        if (e) { e.salary = Math.round(e.salary * 1.1); e.morale = clamp(e.morale + 0.12, 0, 1.1); }
-        showOverlay(employeeCard(ctx(), id)); done(null); break;
-      }
+      case 'promote': { const r = promote(s, id); if (r.ok) showOverlay(employeeCard(ctx(), id)); done(r, r.ok ? `Promoted to ${r.role}.` : null); break; }
+      case 'give-raise': { const r = giveRaise(s, id); showOverlay(employeeCard(ctx(), id)); done(r); break; }
+      case 'leave': { const r = sendOnLeave(s, id); showOverlay(employeeCard(ctx(), id)); done(r, r.ok ? 'Out of office for five days.' : null); break; }
+      case 'pace': done(setPace(s, id)); break;
       case 'reassign-select': done(reassign(s, id, el.value)); break;
       case 'employee': showOverlay(employeeCard(ctx(), id)); break;
       case 'close-overlay': hideOverlay(); break;
@@ -220,6 +218,13 @@ export function createUI(app) {
         const p = s.products.find((x) => x.id === id);
         if (p) p.priority = Number(el.dataset.val);
         done(null); break;
+      }
+      case 'approach': { const [pid, aid] = id.split('|'); done(setApproach(s, pid, aid)); break; }
+      case 'sell-product': {
+        const p = s.products.find((x) => x.id === id);
+        if (!p || !confirm(`Sell ${p.name} for ${money(productSalePrice(s, p))}? Its users and customers go with it.`)) return;
+        done(sellProduct(s, id, app.log));
+        break;
       }
       case 'new-product': done(createProduct(s, mods, id), 'New product started.'); break;
       case 'priority-dept': { const [d, p] = id.split('|'); s.departments[d].priority = p; done(null); break; }

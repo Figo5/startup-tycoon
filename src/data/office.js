@@ -39,7 +39,7 @@ export const tierIndex = (id) => OFFICE_TIERS.findIndex((t) => t.id === id);
 
 // Rooms are bought once per run and persist through office upgrades.
 export const ROOMS = [
-  { id: 'breakroom', name: 'Break Room', cost: 9000, minTier: 'suite', effect: { moraleGain: 0.08 },
+  { id: 'breakroom', name: 'Break Room', cost: 9000, minTier: 'suite', effect: { moraleGain: 0.08, rest: 0.05 },
     blurb: 'Coffee machine, sofa, a place to not be at a desk.' },
   { id: 'meeting', name: 'Meeting Room', cost: 16000, minTier: 'suite', effect: { deptBonus: 0.06 },
     blurb: 'Decisions get made faster when people can shut a door.' },
@@ -49,7 +49,7 @@ export const ROOMS = [
     blurb: 'A gong. There is always a gong.' },
   { id: 'lab', name: 'Research Lab', cost: 220000, minTier: 'loft', effect: { researchSpeed: 0.35 },
     blurb: 'Where the long-shot work happens.' },
-  { id: 'gym', name: 'Gym', cost: 180000, minTier: 'floor', effect: { moraleGain: 0.1, staffChurn: -0.2 },
+  { id: 'gym', name: 'Gym', cost: 180000, minTier: 'floor', effect: { moraleGain: 0.1, staffChurn: -0.2, rest: 0.06 },
     blurb: 'Retention, of the employee kind.' },
   { id: 'exec', name: 'Executive Office', cost: 400000, minTier: 'floor', effect: { managerBonus: 0.15, valuation: 0.04 },
     blurb: 'Where the fundraising happens.' },

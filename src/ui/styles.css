@@ -208,3 +208,19 @@ hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* --- traits & people ---------------------------------------------------- */
+.tag.trait { margin-right: 3px; }
+.tag.trait-common { color: #b8b3c8; border-color: #4a4658; }
+.tag.trait-rare { color: #5aa9e6; border-color: #2f5f86; }
+.tag.trait-legendary { color: #f2b134; border-color: #8a6414; background: rgba(242, 177, 52, 0.08); }
+.trait-list { display: grid; gap: 4px; margin: 6px 0 10px; }
+ul.story { list-style: none; padding: 0; margin: 4px 0; }
+ul.story li { padding: 2px 0; border-bottom: 1px dashed #2a2735; }
+.tag.launch-flop { color: var(--bad); border-color: var(--bad); }
+.tag.launch-solid { color: #b8b3c8; }
+.tag.launch-hit { color: var(--good); border-color: var(--good); }
+.tag.launch-viral { color: var(--accent); border-color: var(--accent); background: rgba(242, 177, 52, 0.1); }
+#feed li.launch, #feed li.launch .tag { color: var(--accent); }
+#feed li.market, #feed li.market .tag { color: #8fd18f; }
+#feed li.rival, #feed li.rival .tag { color: #e58f6a; }

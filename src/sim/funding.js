@@ -3,11 +3,12 @@ import { stageOrder } from '../data/stages.js';
 import { mul } from './modifiers.js';
 import { clamp } from './util.js';
 import { diluteFounder, readEquity, runEnded } from './equity.js';
+import { trendFundingMul } from './market.js';
 
 export function investorValuation(state, mods, round) {
   const annual = state.stats.revenueDay * 365;
   const v = Math.max(round.floor, annual * round.multiple);
-  return v * mul(mods, 'fundingValuation', -0.8) * (state.funding.bonus || 1);
+  return v * mul(mods, 'fundingValuation', -0.8) * (state.funding.bonus || 1) * trendFundingMul(state);
 }
 
 export function fundingOffers(state, mods) {

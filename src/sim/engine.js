@@ -10,6 +10,8 @@ import { tickRoadmaps, autoStartRoadmaps } from './roadmap.js';
 import { tickGoals } from './goals.js';
 import { refreshAcquisitionTargets } from './acquisitions.js';
 import { checkStageUp } from './stages.js';
+import { tickMarket } from './market.js';
+import { settleCompleted } from './launch.js';
 import { clamp, sum } from './util.js';
 import { MAX_OFFLINE_DAYS, REAL_SECONDS_PER_DAY } from './state.js';
 
@@ -33,6 +35,7 @@ export function step(state, days, log) {
   for (const c of completed) {
     log?.(`${c.product.name}: ${c.project.name} complete.`, c.project.typeId === 'mvp' ? 'stage' : 'good');
   }
+  if (completed.length) settleCompleted(state, mods, wf, completed, log);
   autoQueueProjects(state, mods, log);
 
   // Roadmaps run alongside the project queue, driven by product/design/eng output.
@@ -50,6 +53,7 @@ export function step(state, days, log) {
   tickResearch(state, mods, days, log);
   tickCompetitors(state, mods, days, log);
   tickEvents(state, mods, days, log);
+  tickMarket(state, days, log);
   refreshAcquisitionTargets(state);
   tickGoals(state, mods, days, log);
   checkStageUp(state, log);

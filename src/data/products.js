@@ -190,7 +190,42 @@ export const PROJECT_TYPES = [
     desc: 'Ship in more languages, reach more markets.',
     effects: { market: 0.25 },
     requires: { research: 'global_go_to_market' }
+  },
+  {
+    id: 'major', name: 'Next Major Version', repeatable: true, workMul: 1.5, launch: 0.15,
+    desc: 'A relaunch: v2, v3... Big quality and market jump, clears some debt, and gets a launch of its own. Needs 4 feature updates since the last one.',
+    effects: { quality: 0.16, market: 0.22, debt: -0.12, reputation: 0.06, majorVersion: true },
+    requires: { featuresSinceMajor: 4 }
   }
+];
+
+// Projects that go out to customers get a launch: a roll against quality,
+// polish, marketing and the people who shipped it.
+export const LAUNCHABLE = new Set(['mvp', 'feature', 'mobileport', 'aifeature', 'i18n', 'enterprise', 'major']);
+
+/**
+ * How a product team builds. Chosen per product; each queued project keeps the
+ * approach it was queued with.
+ *   work     multiplier on project size
+ *   quality  multiplier on quality gains
+ *   debt     multiplier on debt added (and a flat extra)
+ *   launch   shift to the launch roll
+ */
+export const APPROACHES = [
+  { id: 'rush', name: 'Rush', work: 0.65, quality: 0.5, debtMul: 1.5, debtAdd: 0.05, launch: -0.12,
+    desc: 'Ship a third sooner. Less polish, more debt, shakier launches.' },
+  { id: 'standard', name: 'Standard', work: 1, quality: 1, debtMul: 1, debtAdd: 0, launch: 0,
+    desc: 'The normal trade-off.' },
+  { id: 'polish', name: 'Polish', work: 1.4, quality: 1.35, debtMul: 0.4, debtAdd: -0.02, launch: 0.12,
+    desc: 'Takes 40% longer. Better quality, little debt, launches land harder.' }
+];
+export const approachById = (id) => APPROACHES.find((a) => a.id === id) || APPROACHES[1];
+
+export const LAUNCH_OUTCOMES = [
+  { id: 'flop', name: 'Flop', below: 0.28 },
+  { id: 'solid', name: 'Solid', below: 0.6 },
+  { id: 'hit', name: 'Hit', below: 0.86 },
+  { id: 'viral', name: 'Viral', below: Infinity }
 ];
 
 export const projectTypeById = (id) => PROJECT_TYPES.find((p) => p.id === id);
