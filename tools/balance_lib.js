@@ -218,7 +218,7 @@ export function operate(state, profile, marks) {
   const exits = exitPreview(state, mods).filter((e) => e.available);
   if (exits.length && !marks.exit && (state.company.stage === 'late' || profile.exitEarly)) {
     const best = exits.sort((a, b) => b.rep - a.rep)[0];
-    marks.exit = { day: state.time.day, name: best.name, value: best.value, rep: best.rep, equity: state.company.founderEquity };
+    marks.exit = { id: best.id, day: state.time.day, name: best.name, value: best.value, rep: best.rep, equity: state.company.founderEquity };
   }
 }
 

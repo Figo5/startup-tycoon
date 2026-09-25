@@ -118,7 +118,7 @@ export function applyProjectEffects(state, mods, p, prj) {
   // Repeatable work widens the market with diminishing returns: the hundredth
   // feature does not open a new market the way the first one did.
   if (e.market) {
-    const diminish = type.repeatable ? Math.max(0, 1 - p.marketBonus / 1.5) : 1;
+    const diminish = type.repeatable ? Math.max(0, 1 - p.marketBonus / 2.4) : 1;
     p.marketBonus += e.market * gainMul * diminish;
   }
   if (e.infraEff) p.infraEff = clamp(p.infraEff + e.infraEff, -0.6, 0.8);

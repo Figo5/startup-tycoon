@@ -12,15 +12,15 @@ export const REP_EXPONENT = 0.5;
 
 export { canExit, runEnded };
 
-/** Early exits still pay something for how far the company got. */
-const STAGE_BONUS = { growing: 2, scaleup: 3, major: 4, late: 5 };
+/** Early exits always pay at least this much for how far the company got. */
+const STAGE_FLOOR = { growing: 1, scaleup: 2, major: 3, late: 3 };
 
 export function repFor(state, mods, proceeds, exitDef) {
   const scenario = SCENARIOS.find((s) => s.id === state.scenarioId) || SCENARIOS[0];
   const fx = metaEffects(state.meta);
-  const base = Math.pow(Math.max(0, proceeds) / REP_DIVISOR, REP_EXPONENT)
-    + (exitDef?.stageBonus ? (STAGE_BONUS[state.company.stage] || 0) : 0);
-  return Math.floor(base * (exitDef?.repMul ?? 1) * scenario.repMul * (1 + (fx.exitRep || 0) + challengeFrBonus(state)));
+  const base = Math.pow(Math.max(0, proceeds) / REP_DIVISOR, REP_EXPONENT) * (exitDef?.repMul ?? 1);
+  const floor = exitDef?.stageBonus ? (STAGE_FLOOR[state.company.stage] || 0) : 0;
+  return Math.floor(Math.max(base, floor) * scenario.repMul * (1 + (fx.exitRep || 0) + challengeFrBonus(state)));
 }
 
 /**
