@@ -19,6 +19,8 @@ import { acquireCompany } from '../sim/acquisitions.js';
 import { acceptGoal, abandonGoal } from '../sim/goals.js';
 import { playMinigame, MINIGAMES } from '../minigames/index.js';
 import { founderActionStatus, useFounderAction } from '../sim/org.js';
+import { leaderboard } from '../sim/competitors.js';
+import { marketCap } from '../sim/products.js';
 import { stageProgress } from '../sim/stages.js';
 import { economyNow, trendFor } from '../sim/market.js';
 import { paceById } from '../data/traits.js';
@@ -35,7 +37,7 @@ const PANEL_KEYS = { l: 'legacy' };
 // A purchase is refused if the same control is triggered again inside this
 // window. A double click is one interaction; it must buy one level.
 const REPEAT_GUARD_MS = 450;
-const PURCHASE_ACTIONS = new Set(['loan', 'sell-product', 'buy-prestige', 'room', 'office', 'new-product', 'research',
+const PURCHASE_ACTIONS = new Set(['pitch', 'loan', 'sell-product', 'buy-prestige', 'room', 'office', 'new-product', 'research',
   'raise', 'acquire', 'acquire-company', 'advisor-hire', 'roadmap-start', 'hire']);
 
 export function createUI(app) {
@@ -180,8 +182,13 @@ export function createUI(app) {
   }
 
   // ------------------------------------------------------------ panels
+  // While the pointer is moving over the panel, the player is about to click
+  // something: do not swap the HTML out from under them. Actions force a render.
+  let lastPanelPointer = 0;
+  const PANEL_HOLD_MS = 1500;
   function renderPanel(force = false) {
     if (!openPanel) return;
+    if (!force && Date.now() - lastPanelPointer < PANEL_HOLD_MS) return;
     const html = PANELS[openPanel](ctx());
     if (!force && html === lastPanelHtml) return;
     lastPanelHtml = html;
@@ -300,6 +307,14 @@ export function createUI(app) {
         done(null); break;
       }
       case 'raise': { const [rid, inv] = id.split('|'); const r = raise(s, mods, rid, inv || 'lead'); done(r, r.ok ? `Round closed: ${money(r.offer.cash)} from ${r.offer.name}.` : null); break; }
+      case 'pitch': {
+        const [rid, inv] = id.split('|');
+        const score = await runMinigame('pitch', pitchFacts(s, mods));
+        s.funding.bonus = Math.max(s.funding.bonus || 1, 1 + 0.15 * score);
+        const r = raise(s, mods, rid, inv || 'lead');
+        done(r, r.ok ? `Pitch ${Math.round(score * 100)}%: raised ${money(r.offer.cash)}.` : null);
+        break;
+      }
       case 'loan': { const r = takeLoan(s); done(r, r.ok ? `Borrowed ${money(r.principal)}.` : null); break; }
       case 'office': done(upgradeOffice(s), 'New office. Everyone is moving desks.'); break;
       case 'room': done(buyRoom(s, id), 'Built.'); break;
@@ -369,10 +384,10 @@ export function createUI(app) {
     }
   }
 
-  async function runMinigame(type) {
+  async function runMinigame(type, ctxData = null) {
     return new Promise((resolve) => {
       els.overlay.hidden = false;
-      playMinigame(type, els.overlayCard).then((score) => {
+      playMinigame(type, els.overlayCard, ctxData).then((score) => {
         els.overlayCard.innerHTML = `<h2>${MINIGAMES[type].name}</h2>
           <p>Result: <b>${Math.round(score * 100)}%</b></p>
           <p class="muted small">${score > 0.8 ? 'Excellent. The bonus is substantial.' : score > 0.4 ? 'Solid work.' : 'Not your best. A small bonus all the same.'}</p>
@@ -388,6 +403,9 @@ export function createUI(app) {
     if (b) showPanel(b.dataset.panel);
   });
   $('#drawer-close').addEventListener('click', hidePanel);
+  for (const ev of ['pointermove', 'pointerdown', 'wheel']) {
+    els.drawer.addEventListener(ev, () => { lastPanelPointer = Date.now(); }, { passive: true });
+  }
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
@@ -425,6 +443,37 @@ export function createUI(app) {
     renderPanelNow() { renderPanel(true); },
     pushFeed, showOverlay, hideOverlay, showPanel, hidePanel,
     get openPanel() { return openPanel; }
+  };
+}
+
+/** The real numbers an investor pitch is built from. */
+export function pitchFacts(s, mods) {
+  const live = s.products.filter((p) => p.stage === 'live');
+  const users = live.reduce((a, p) => a + p.users, 0);
+  const cust = s.stats.customers || 0;
+  const staff = s.employees;
+  const avgChurn = live.length ? live.reduce((a, p) => a + (p.churnDay || 0) * p.users, 0) / Math.max(1, users) : 0.02;
+  const board = leaderboard(s);
+  const cap = live.reduce((a, p) => a + marketCap(s, mods, p), 0);
+  const trend = [...new Set(live.map((p) => p.category))].map((c) => trendFor(s, c)).find((t) => t && !t.negative);
+  return {
+    growth: Math.max(-1, Math.min(3, (s.stats.growthRate || 0))) / 3,
+    monthlyChurn: Math.min(1, avgChurn * 30),
+    margin: s.stats.revenueDay > 0 ? s.stats.netDay / s.stats.revenueDay : -1,
+    people: staff.length,
+    skill: staff.reduce((a, e) => a + e.skill, 0) / Math.max(1, staff.length),
+    quality: live.length ? Math.max(...live.map((p) => p.quality)) : 0.4,
+    reputation: s.company.reputation,
+    penetration: cap > 0 ? users / cap : 0,
+    rank: board.findIndex((r) => r.you) + 1,
+    field: board.length,
+    trend: trend?.name || null,
+    users: Math.round(users),
+    conversion: users > 0 ? cust / users : 0,
+    contracts: s.contracts.length,
+    runwayDays: s.stats.netDay >= 0 ? Infinity : s.company.cash / -s.stats.netDay,
+    runwayText: s.stats.netDay >= 0 ? 'profitable' : fmtDuration(s.company.cash / -s.stats.netDay),
+    debt: live.length ? Math.max(...live.map((p) => p.techDebt)) / 2 : 0
   };
 }
 

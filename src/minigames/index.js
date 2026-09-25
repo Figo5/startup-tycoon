@@ -12,14 +12,82 @@ const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = rnd(
 export const MINIGAMES = {
   debugging: { name: 'Debugging', blurb: 'Three stack traces. In each one, exactly one frame appears only once. Find it.' },
   incident: { name: 'Incident Response', blurb: 'Route the capacity you have across the services that are failing.' },
-  negotiation: { name: 'Negotiation', blurb: 'Read what the buyer actually cares about and counter accordingly.' }
+  negotiation: { name: 'Negotiation', blurb: 'Read what the buyer actually cares about and counter accordingly.' },
+  pitch: { name: 'Investor Pitch', blurb: 'Three questions. Lead with what is genuinely strongest about your company - they will check.' }
 };
 
-export function playMinigame(type, host) {
+export function playMinigame(type, host, ctx = null) {
   if (type === 'debugging') return debugging(host);
   if (type === 'incident') return incident(host);
   if (type === 'negotiation') return negotiation(host);
+  if (type === 'pitch') return pitch(host, ctx);
   return Promise.resolve(0);
+}
+
+// ----------------------------------------------------------------- pitch
+// Built from the company's real numbers. Each answer is a talking point with a
+// strength in 0..1; the right answer is the strongest one (or, for the one
+// question about risks, the honest weakest one). No trick, no timer.
+function pitch(host, facts) {
+  const f = facts || {};
+  const pctS = (v) => `${Math.round(v * 100)}%`;
+  const QUESTIONS = [
+    { q: 'What makes this company special?', options: [
+      { t: `Growth: revenue moving ${f.growth >= 0 ? '+' : ''}${pctS(f.growth || 0)} a month`, s: Math.min(1, Math.max(0, (f.growth || 0) / 0.6)) },
+      { t: `Retention: ${pctS(f.monthlyChurn || 0)} of users leave a month`, s: Math.max(0, 1 - (f.monthlyChurn || 0) / 0.5) },
+      { t: `Margins: ${pctS(f.margin || 0)} of revenue is profit`, s: Math.min(1, Math.max(0, (f.margin || 0) / 0.5)) }
+    ] },
+    { q: 'Why will you win?', options: [
+      { t: `The team: ${f.people || 1} people, average skill ${(f.skill || 5).toFixed(1)}`, s: Math.min(1, ((f.skill || 5) - 3) / 6) },
+      { t: `The product: quality ${pctS(f.quality || 0)}`, s: Math.min(1, f.quality || 0) },
+      { t: `The brand: reputation ${(f.reputation || 1).toFixed(1)}`, s: Math.min(1, (f.reputation || 1) / 10) }
+    ] },
+    { q: 'How big can this get?', options: [
+      { t: `We have only ${pctS(f.penetration || 0)} of our market so far`, s: Math.max(0, 1 - (f.penetration || 0)) },
+      { t: `We are #${f.rank || 9} of ${f.field || 9} on the leaderboard`, s: Math.max(0, 1 - ((f.rank || 9) - 1) / Math.max(1, (f.field || 9) - 1)) },
+      { t: f.trend ? `We are riding the ${f.trend}` : 'The market is steady and predictable', s: f.trend ? 0.8 : 0.2 }
+    ] },
+    { q: 'Who pays you?', options: [
+      { t: `${f.users || 0} users`, s: Math.min(1, Math.log10(1 + (f.users || 0)) / 7) },
+      { t: `${pctS(f.conversion || 0)} of users pay`, s: Math.min(1, (f.conversion || 0) / 0.25) },
+      { t: `${f.contracts || 0} enterprise contracts`, s: Math.min(1, (f.contracts || 0) / 4) }
+    ] },
+    { q: 'What keeps you up at night?', worst: true, options: [
+      { t: `Churn: ${pctS(f.monthlyChurn || 0)} a month`, s: Math.max(0, 1 - (f.monthlyChurn || 0) / 0.5) },
+      { t: `Runway: ${f.runwayText || 'profitable'}`, s: f.runwayDays === Infinity ? 1 : Math.min(1, (f.runwayDays || 0) / 365) },
+      { t: `Technical debt: ${pctS(f.debt || 0)}`, s: Math.max(0, 1 - (f.debt || 0)) }
+    ] }
+  ];
+  return new Promise((resolve) => {
+    const rounds = shuffle(QUESTIONS.slice()).slice(0, 3);
+    let i = 0;
+    let points = 0;
+    const build = () => {
+      const r = rounds[i];
+      const opts = shuffle(r.options.slice());
+      const bestS = r.worst ? Math.min(...opts.map((o) => o.s)) : Math.max(...opts.map((o) => o.s));
+      frame(host, `Investor Pitch — question ${i + 1} of 3`, MINIGAMES.pitch.blurb,
+        `<div class="tile"><p><b>The partner asks:</b> ${r.q}</p>${r.worst ? '<p class="small muted">They respect honesty. Name the real weak spot.</p>' : ''}</div>
+        <div role="group" aria-label="Answers">
+          ${opts.map((o, k) => `<button class="choice" data-o="${k}"><b>${k + 1}. ${o.t}</b></button>`).join('')}
+        </div>
+        <p class="small muted">Answered well so far: ${Math.round(points * 10) / 10}/${i}</p>`);
+      const choose = (k) => {
+        const o = opts[k];
+        const spread = Math.max(1e-6, Math.max(...opts.map((x) => x.s)) - Math.min(...opts.map((x) => x.s)));
+        // Partial credit for a nearly-as-good answer.
+        points += r.worst ? 1 - (o.s - bestS) / spread : 1 - (bestS - o.s) / spread;
+        host.querySelectorAll('.choice').forEach((el, idx) => {
+          el.style.borderColor = opts[idx].s === bestS ? 'var(--good)' : (idx === k ? 'var(--bad)' : '');
+        });
+        i++;
+        setTimeout(() => (i < rounds.length ? build() : resolve(Math.max(0, Math.min(1, points / rounds.length)))), 700);
+      };
+      host.querySelectorAll('[data-o]').forEach((el) => el.addEventListener('click', () => choose(Number(el.dataset.o))));
+      host.querySelector('.choice')?.focus();
+    };
+    build();
+  });
 }
 
 function frame(host, title, blurb, body, footer = '') {

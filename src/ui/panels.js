@@ -592,7 +592,8 @@ export function finance(ctx) {
             <span class="small">valuation ${money(t.valuation)} · ${esc(t.blurb)}</span>
             ${t.target ? `<span class="small" style="color:var(--warn);display:block">Board target: revenue ${money(Math.max(state.stats.revenueDay, 50) * t.target.revenueMul)}/day within ${t.target.days} days, or the board forces cuts.</span>` : ''}
             ${t.perk ? `<span class="small" style="display:block">${effectRow(t.perk)} ${Object.entries(t.exitMod || {}).map(([k, v]) => `<span class="tag">${k} exit ${v > 0 ? '+' : ''}${Math.round(v * 100)}%</span>`).join(' ')}</span>` : ''}
-          </button>`).join('') : `<div class="spread small"><span>Investor valuation</span><b>${money(o.valuation)}</b></div>
+          </button>`).join('') + `<button class="choice" data-act="pitch" data-id="${o.id}|lead"><b>Pitch the lead investor yourself ▶</b>
+            <span class="small">Three questions about your real numbers. A strong pitch raises the price by up to 15%.</span></button>` : `<div class="spread small"><span>Investor valuation</span><b>${money(o.valuation)}</b></div>
           ${taken ? '' : `<p class="small muted">${esc(o.reason || 'Unavailable')}</p>`}`}
       </div>`;
     }).join('')}</div>
