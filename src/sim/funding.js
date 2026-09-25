@@ -14,6 +14,7 @@ export function investorValuation(state, mods, round) {
 
 export function fundingOffers(state, mods) {
   const ended = runEnded(state);
+  const bootstrapped = Array.isArray(state.challenges) && state.challenges.includes('bootstrap');
   return FUNDING_ROUNDS.map((round) => {
     const taken = state.funding.rounds.filter((r) => r.id === round.id).length;
     const blocked = taken > 0 && !round.repeatable;
@@ -38,8 +39,8 @@ export function fundingOffers(state, mods) {
       cash: val * round.equity,
       rep: round.rep,
       terms,
-      available: !ended && !blocked && okRev && okStage,
-      reason: ended ? 'This run has already ended.' : blocked ? 'Already raised' : !okStage ? `Needs the ${req.stage} stage`
+      available: !ended && !blocked && okRev && okStage && !bootstrapped,
+      reason: ended ? 'This run has already ended.' : bootstrapped ? 'Bootstrapped challenge: no equity rounds' : blocked ? 'Already raised' : !okStage ? `Needs the ${req.stage} stage`
         : !okRev ? `Needs $${Math.round(req.revenueDay).toLocaleString()}/day revenue` : null
     };
   });
@@ -107,6 +108,11 @@ export function tickFunding(state, days, log) {
     }
   }
   // Revenue-based loans are repaid out of revenue in tickEconomy.
+  if (f.loans.some((l) => l.owed <= 0.5)) {
+    if (!state.flags) state.flags = { unlocked: [] };
+    state.flags.loanRepaid = true;
+    log?.('The revenue loan is paid off.', 'good');
+  }
   f.loans = f.loans.filter((l) => l.owed > 0.5);
 }
 
@@ -149,22 +155,57 @@ export function canExit(state) {
     || state.flags.unlocked.includes('exit_offer');
 }
 
+/** The rival a merger would be with: the most valuable one worth at least 40% of you. */
+export function mergerPartner(state) {
+  const v = state.stats.valuation || 0;
+  return state.competitors.filter((c) => c.alive && !c.acquired && c.valuation >= v * 0.4)
+    .sort((a, b) => b.valuation - a.valuation)[0] || null;
+}
+
+function earlyExit(state, e) {
+  const order = stageOrder(state.company.stage);
+  const v = state.stats.valuation || 0;
+  if (e.id === 'acquihire') {
+    return { gate: order >= stageOrder('growing'), gateReason: 'Buyers only look at teams once you are Growing',
+      value: Math.max(v * 0.45, (state.employees.length - 1) * 1.2e6) };
+  }
+  if (e.id === 'pe') {
+    const profit = Math.max(0, state.stats.netDay || 0) * 365;
+    return { gate: order >= stageOrder('scaleup') && profit > 0,
+      gateReason: order < stageOrder('scaleup') ? 'Private equity looks at Scale-Ups and up' : 'Needs a profitable company',
+      value: profit * 14 + Math.max(0, state.company.cash) * 0.8 };
+  }
+  if (e.id === 'merger') {
+    const partner = mergerPartner(state);
+    return { gate: order >= stageOrder('major') && !!partner,
+      gateReason: order < stageOrder('major') ? 'Needs the Major Tech stage' : 'No rival is big enough to merge with',
+      value: v * 1.1, partner };
+  }
+  return { gate: false, value: 0 };
+}
+
 export function exitOptions(state, mods) {
   const v = state.stats.valuation;
   const gate = canExit(state);
   const ended = runEnded(state);
+  const bootstrap = Array.isArray(state.challenges) && state.challenges.includes('bootstrap');
   return EXITS.map((e) => {
     const req = e.req || {};
     const okRev = state.stats.revenueDay >= (req.revenueDay || 0);
     const okRep = state.company.reputation >= (req.reputation || 0);
     const equity = readEquity(state);
     const exitMod = 1 + (state.funding?.exitMods?.[e.id] || 0);
+    const early = e.early ? earlyExit(state, e) : null;
+    const base = early ? early.value : v * e.multiple;
+    const open = early ? early.gate : gate;
     return {
       ...e,
-      value: v * e.multiple * exitMod,
-      proceeds: v * e.multiple * exitMod * equity,
-      available: gate && okRev && okRep && !ended,
-      reason: ended ? 'This run has already ended.' : !gate ? 'No buyer yet - reach the Late Stage or field an acquisition offer'
+      value: base * exitMod,
+      proceeds: base * exitMod * equity,
+      partner: early?.partner?.name || null,
+      available: open && okRev && okRep && !ended,
+      reason: ended ? 'This run has already ended.'
+        : !open ? (early ? early.gateReason : 'No buyer yet - reach the Late Stage or field an acquisition offer')
         : !okRev ? `Needs $${Math.round(req.revenueDay).toLocaleString()}/day revenue`
         : !okRep ? `Needs ${req.reputation} reputation` : null
     };

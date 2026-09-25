@@ -10,6 +10,7 @@ import { initiativeCommit } from './roadmap.js';
 import { marketMods } from './market.js';
 import { fundingPerks } from './funding.js';
 import { orgMods } from './org.js';
+import { legacyMods } from './legacy.js';
 
 const FLAT_KEYS = new Set(['capacity', 'deskBonus', 'candidateSlots']);
 const START_KEYS = new Set(['startCash', 'founderSkill', 'startReputation', 'startEngineers',
@@ -46,6 +47,8 @@ export function computeMods(state) {
   merge(fundingPerks(state));
   // Department perks and cross-department synergies.
   merge(orgMods(state));
+  // The founder's background.
+  merge(legacyMods(state));
   // How much engineering an active roadmap initiative takes out of the product
   // queue. Read by products.distributeEngineering.
   m.initiativeCommit = initiativeCommit(state);

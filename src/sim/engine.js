@@ -13,6 +13,7 @@ import { checkStageUp } from './stages.js';
 import { tickMarket } from './market.js';
 import { tickFunding } from './funding.js';
 import { settleCompleted } from './launch.js';
+import { tickAchievements } from './legacy.js';
 import { clamp, sum } from './util.js';
 import { MAX_OFFLINE_DAYS, REAL_SECONDS_PER_DAY } from './state.js';
 
@@ -59,6 +60,7 @@ export function step(state, days, log) {
   refreshAcquisitionTargets(state);
   tickGoals(state, mods, days, log);
   checkStageUp(state, log);
+  tickAchievements(state, log);
 
   state.time.day += days;
   updateGrowth(state, revenue, days);

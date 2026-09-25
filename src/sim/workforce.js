@@ -267,8 +267,10 @@ export function hireCost(candidate) {
   return candidate.signingBonus || 0;
 }
 
+export const TEAM_CAP = 25;
 export function canHire(state, mods) {
   const { capacity } = deskPressure(state, mods);
+  if (Array.isArray(state.challenges) && state.challenges.includes('small_team') && state.employees.length >= TEAM_CAP) return false;
   return state.employees.length < capacity;
 }
 
@@ -276,7 +278,7 @@ export function hire(state, candidateId, mods) {
   const i = state.candidates.findIndex((c) => c.id === candidateId);
   if (i < 0) return { ok: false, reason: 'Candidate no longer available.' };
   const c = state.candidates[i];
-  if (!canHire(state, mods)) return { ok: false, reason: 'No free desks. Expand the office first.' };
+  if (!canHire(state, mods)) return { ok: false, reason: state.challenges?.includes('small_team') && state.employees.length >= TEAM_CAP ? 'Small Team challenge: 25 people is the limit.' : 'No free desks. Expand the office first.' };
   const cost = hireCost(c);
   if (state.company.cash < cost) return { ok: false, reason: 'Not enough cash for the signing bonus.' };
   state.candidates.splice(i, 1);

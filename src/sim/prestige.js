@@ -5,17 +5,22 @@ import { newGame, emptyMeta, metaEffects, normalizeMeta } from './state.js';
 import { stageOrder } from '../data/stages.js';
 import { clamp } from './util.js';
 import { readEquity, runEnded, sellFounderStake } from './equity.js';
+import { challengeFrBonus, exitAchievements, recordLegacy, ensureLegacyMeta } from './legacy.js';
 
 export const REP_DIVISOR = 1.5e8;
 export const REP_EXPONENT = 0.5;
 
 export { canExit, runEnded };
 
+/** Early exits still pay something for how far the company got. */
+const STAGE_BONUS = { growing: 2, scaleup: 3, major: 4, late: 5 };
+
 export function repFor(state, mods, proceeds, exitDef) {
   const scenario = SCENARIOS.find((s) => s.id === state.scenarioId) || SCENARIOS[0];
   const fx = metaEffects(state.meta);
-  const base = Math.pow(Math.max(0, proceeds) / REP_DIVISOR, REP_EXPONENT);
-  return Math.floor(base * (exitDef?.repMul ?? 1) * scenario.repMul * (1 + (fx.exitRep || 0)));
+  const base = Math.pow(Math.max(0, proceeds) / REP_DIVISOR, REP_EXPONENT)
+    + (exitDef?.stageBonus ? (STAGE_BONUS[state.company.stage] || 0) : 0);
+  return Math.floor(base * (exitDef?.repMul ?? 1) * scenario.repMul * (1 + (fx.exitRep || 0) + challengeFrBonus(state)));
 }
 
 /**
@@ -41,17 +46,21 @@ export function performExit(state, mods, exitId) {
   const opt = exitPreview(state, mods).find((o) => o.id === exitId);
   if (!opt) return { ok: false, reason: 'Unknown exit.' };
   if (!opt.available) return { ok: false, reason: opt.reason || 'Not available yet.' };
-  if (!canExit(state)) return { ok: false, reason: 'No buyer at this stage.' };
+  if (!opt.early && !canExit(state)) return { ok: false, reason: 'No buyer at this stage.' };
 
   // Anything that reads the pre-sale company has to run before the stake moves.
   const equityBefore = readEquity(state);
-  const achievements = achievementsFor(state, opt);
 
   const sale = sellFounderStake(state, { value: opt.value, id: opt.id, name: opt.name, day: state.time.day });
   if (!sale.ok) return { ok: false, reason: sale.reason };
 
   const rep = repFor(state, mods, sale.proceeds, opt);
   const meta = normalizeMeta(state.meta || emptyMeta());
+  state.meta = meta;
+  // Exit achievements pay their own small Founder Reputation, once ever.
+  const frBefore = meta.founderRep;
+  const achievements = exitAchievements(state, opt);
+  const achievementFr = meta.founderRep - frBefore;
   meta.founderRep += rep;
   meta.lifetimeRep += rep;
   meta.runs.unshift({
@@ -70,10 +79,11 @@ export function performExit(state, mods, exitId) {
   for (const s of SCENARIOS) {
     if (meta.runs.length >= s.unlockRuns && !meta.unlockedScenarios.includes(s.id)) meta.unlockedScenarios.push(s.id);
   }
-  for (const a of achievements) if (!meta.achievements.includes(a)) meta.achievements.push(a);
+  recordLegacy(state, meta, { value: opt.value, proceeds: sale.proceeds });
 
   state.exitResult.rep = rep;
   state.exitResult.achievements = achievements.slice();
+  state.exitResult.achievementFr = achievementFr;
   state.time.paused = true;
 
   return {
@@ -81,7 +91,7 @@ export function performExit(state, mods, exitId) {
     meta,
     summary: {
       ...opt, proceeds: sale.proceeds, equity: equityBefore, value: opt.value,
-      days: Math.round(state.time.day), rep, achievements
+      days: Math.round(state.time.day), rep, achievements, achievementFr
     }
   };
 }
@@ -96,6 +106,7 @@ function achievementsFor(state, opt) {
   if (state.competitors.some((c) => c.acquired)) out.push('acquirer');
   return out;
 }
+void achievementsFor;
 
 export function prestigeLevels(meta) {
   const m = normalizeMeta(meta);
@@ -150,8 +161,8 @@ export function availableScenarios(meta) {
   return SCENARIOS.filter((s) => m.runs.length >= s.unlockRuns);
 }
 
-export function startNextRun(meta, { seed, scenarioId, companyName } = {}) {
-  return newGame({ seed, meta: normalizeMeta(meta), scenarioId, companyName });
+export function startNextRun(meta, { seed, scenarioId, companyName, startCategory, background, challenges, cofounder } = {}) {
+  return newGame({ seed, meta: normalizeMeta(meta), scenarioId, companyName, startCategory, background, challenges, cofounder });
 }
 
 export { PRESTIGE_UPGRADES };

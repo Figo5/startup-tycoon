@@ -39,11 +39,13 @@ test('an exit pays Founder Reputation scaled by the stake kept', () => {
 test('performExit records the run and preserves meta progression', () => {
   const s = lateStage(52);
   const m = computeMods(s);
+  const before = s.meta.lifetimeRep;   // in-play achievements already earned
   const r = performExit(s, m, 'acqui');
   assert.ok(r.ok, r.reason);
   assert.equal(r.meta.runs.length, 1);
-  assert.equal(r.meta.founderRep, r.summary.rep);
-  assert.equal(r.meta.lifetimeRep, r.summary.rep);
+  // Exit achievements pay their own Founder Reputation on top of the exit.
+  assert.equal(r.meta.founderRep, before + r.summary.rep + r.summary.achievementFr);
+  assert.equal(r.meta.lifetimeRep, before + r.summary.rep + r.summary.achievementFr);
   assert.ok(r.meta.achievements.includes('bootstrapped'));
   assert.ok(r.meta.unlockedScenarios.includes('crowded'), 'a finished run unlocks a harder market');
 });

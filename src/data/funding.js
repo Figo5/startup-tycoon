@@ -18,8 +18,17 @@ export const FUNDING_ROUNDS = [
 
 export const roundById = (id) => FUNDING_ROUNDS.find((r) => r.id === id);
 
-// Exit options unlocked at the late stage.
+// Exits. The first three need the Late Stage (or a buyer who came to you).
+// The others have their own doors: an acqui-hire is always there once you are
+// Growing, private equity buys profit rather than growth, and a merger needs a
+// rival big enough to merge with. `repMul` scales the Founder Reputation paid.
 export const EXITS = [
+  { id: 'acquihire', name: 'Acqui-hire', early: true, repMul: 0.7, stageBonus: true,
+    blurb: 'A big company buys the team, not the product. Small, fast, and always on the table once you are Growing.' },
+  { id: 'pe', name: 'Private Equity Buyout', early: true, repMul: 1.1, stageBonus: true,
+    blurb: 'A fund buys your profits at a multiple. Rewards a lean, profitable company over a fast-growing one.' },
+  { id: 'merger', name: 'Merger Of Equals', early: true, repMul: 1.1, stageBonus: true,
+    blurb: 'Combine with your biggest rival and take a stake in the giant. Needs a rival worth at least 40% of you.' },
   { id: 'acqui', name: 'Acquisition', multiple: 0.9, repMul: 1.0,
     blurb: 'A larger company buys you outright. Clean, fast, slightly cheap.' },
   { id: 'strategic', name: 'Strategic Acquisition', multiple: 1.25, repMul: 1.15, req: { reputation: 4 },

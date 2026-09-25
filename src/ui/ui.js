@@ -29,6 +29,8 @@ const $ = (sel) => document.querySelector(sel);
 /** Panels in keyboard order: 1-9 then 0. */
 export const PANEL_ORDER = ['company', 'products', 'employees', 'departments', 'research',
   'finance', 'office', 'competitors', 'advisors', 'goals'];
+// Reachable by letter rather than number.
+const PANEL_KEYS = { l: 'legacy' };
 
 // A purchase is refused if the same control is triggered again inside this
 // window. A double click is one interaction; it must buy one level.
@@ -361,6 +363,7 @@ export function createUI(app) {
       case 'export': app.exportSave(); break;
       case 'import': app.importSave(); break;
       case 'reset': app.resetGame(); break;
+      case 'found-company': app.foundCompany({ title: 'Found your company', note: 'Choose how this company starts. You can always start another later.', replaceCurrent: true }); break;
       case 'reset-all': app.resetAllProgress(); break;
       default: break;
     }
@@ -409,6 +412,7 @@ export function createUI(app) {
     if (e.code === 'Space' && els.overlay.hidden) { e.preventDefault(); app.togglePause(); }
     const n = e.key === '0' ? 10 : Number(e.key);
     if (n >= 1 && n <= PANEL_ORDER.length && els.overlay.hidden) showPanel(PANEL_ORDER[n - 1]);
+    if (PANEL_KEYS[e.key?.toLowerCase?.()] && els.overlay.hidden) showPanel(PANEL_KEYS[e.key.toLowerCase()]);
     if (e.key === '?') app.showHelp();
     if (els.overlay.hidden && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const fa = founderActionStatus(app.state).find((a) => a.key.toLowerCase() === e.key.toLowerCase());

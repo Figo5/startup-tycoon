@@ -125,6 +125,9 @@ export function applyRunDefaults(s) {
     for (const prj of p.projects || []) if (!prj.approach) prj.approach = 'standard';
   }
   if (!Array.isArray(s.soldProducts)) s.soldProducts = [];
+  if (typeof s.background !== 'string') s.background = 'generalist';
+  if (!Array.isArray(s.challenges)) s.challenges = [];
+  if (typeof s.startCategory !== 'string') s.startCategory = s.products?.[0]?.category || 'mobile';
   if (!['relaxed', 'normal', 'crunch'].includes(s.company.pace)) s.company.pace = 'normal';
   // Rivals saved before blurbs were stored keep their description.
   if (!Array.isArray(s.competitors)) s.competitors = [];

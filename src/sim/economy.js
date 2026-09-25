@@ -54,6 +54,7 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   const st = state.stats;
   const tier = tierById(state.office.tier);
   const rent = (tier ? tier.rent : 0) + roomUpkeep(state);
+  if (Array.isArray(state.challenges) && state.challenges.includes('no_marketing')) state.company.marketingBudget = 0;
   const marketing = Math.max(0, state.company.marketingBudget);
   const misc = state.employees.length * MISC_COST_PER_EMPLOYEE_DAY;
   const contracts = contractRevenue(state);

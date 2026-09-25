@@ -1,15 +1,18 @@
 import { OFFICE_TIERS, ROOMS, tierById, tierIndex, roomById, roomSlots } from '../data/office.js';
 import { stageOrder } from '../data/stages.js';
 import { flat } from './modifiers.js';
+import { metaEffects } from './state.js';
 
 export function officeOptions(state) {
   const cur = tierIndex(state.office.tier);
+  const capped = Array.isArray(state.challenges) && state.challenges.includes('lean_office');
   return OFFICE_TIERS.map((t, i) => ({
     ...t,
     owned: i <= cur,
     current: i === cur,
-    available: i === cur + 1 && stageOrder(state.company.stage) >= stageOrder(t.unlock) && state.company.cash >= t.cost,
+    available: i === cur + 1 && stageOrder(state.company.stage) >= stageOrder(t.unlock) && state.company.cash >= t.cost && !(capped && i > tierIndex('loft')),
     reason: i <= cur ? null
+      : capped && i > tierIndex('loft') ? 'Small Office challenge'
       : i > cur + 1 ? 'Upgrade one tier at a time'
       : stageOrder(state.company.stage) < stageOrder(t.unlock) ? `Needs the ${t.unlock} stage`
       : state.company.cash < t.cost ? 'Not enough cash' : null
@@ -31,7 +34,7 @@ export function upgradeOffice(state) {
 
 export function roomOptions(state) {
   const cur = tierIndex(state.office.tier);
-  const full = state.office.rooms.length >= roomSlots(state.office.tier);
+  const full = state.office.rooms.length >= roomCapacity(state);
   return ROOMS.map((r) => {
     const owned = state.office.rooms.includes(r.id);
     const tierOk = cur >= tierIndex(r.minTier);
@@ -39,9 +42,14 @@ export function roomOptions(state) {
       ...r, owned,
       available: !owned && tierOk && !full && state.company.cash >= r.cost,
       reason: owned ? null : !tierOk ? `Needs the ${tierById(r.minTier).name}`
-        : full ? `No room left (${roomSlots(state.office.tier)} slots)` : state.company.cash < r.cost ? 'Not enough cash' : null
+        : full ? `No room left (${roomCapacity(state)} slots)` : state.company.cash < r.cost ? 'Not enough cash' : null
     };
   });
+}
+
+/** Room slots in the current office, plus any from founder upgrades. */
+export function roomCapacity(state) {
+  return roomSlots(state.office.tier) + (metaEffects(state.meta).roomSlots || 0);
 }
 
 /** Daily upkeep of every room built. Paid with the rent. */

@@ -4,7 +4,7 @@ import { categoryById, projectTypeById, PROJECT_TYPES, PRODUCT_CATEGORIES, CUSTO
 import { stageOrder } from '../data/stages.js';
 import { mul, flat, has } from './modifiers.js';
 import { prioritySplit } from './workforce.js';
-import { makeProject, makeProduct, PRODUCT_NAMES } from './state.js';
+import { makeProject, makeProduct, PRODUCT_NAMES, metaEffects } from './state.js';
 import { acquiredSupportLoad } from './acquisitions.js';
 import { trendMarketMul } from './market.js';
 import { priceWarChurn } from './competitors.js';
@@ -363,7 +363,7 @@ export function availableCategories(state, mods) {
 
 /** Product slots open up with company stage, so early runs stay focused. */
 export function maxProducts(state) {
-  return 1 + Math.max(0, stageOrder(state.company.stage));
+  return 1 + Math.max(0, stageOrder(state.company.stage)) + (metaEffects(state.meta).productSlots || 0);
 }
 
 export function createProduct(state, mods, categoryId, name) {

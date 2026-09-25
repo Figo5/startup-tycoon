@@ -86,7 +86,8 @@ test('a v3 save migrates to v4 with every existing value preserved', () => {
   assert.equal(s.meta.lifetimeRep, 20);
   assert.deepEqual(s.meta.upgrades, { capital: 2, lean_ops: 1, founder_skill: 0, brand_equity: 0,
     talent_network: 0, veteran_team: 0, cloud_credits: 0, market_insight: 0, research_head_start: 0,
-    warm_intros: 0, office_lease: 0, playbook: 0, deal_flow: 0, exit_multiple: 0 });
+    warm_intros: 0, office_lease: 0, playbook: 0, deal_flow: 0, exit_multiple: 0,
+    cofounder: 0, legendary_network: 0, prime_location: 0, venture_studio: 0 });
   assert.equal(s.meta.runs.length, 1);
   assert.deepEqual(s.meta.achievements, ['bootstrapped']);
   assert.deepEqual(s.meta.unlockedScenarios, ['standard', 'crowded']);

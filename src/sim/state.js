@@ -9,6 +9,7 @@ import { stageOrder } from '../data/stages.js';
 import { TRAITS, traitById } from '../data/traits.js';
 import { emptyMarket } from './market.js';
 import { makeRival } from './competitors.js';
+import { BACKGROUNDS, CHALLENGES } from '../data/legacy.js';
 
 export const SAVE_VERSION = 5;
 export const REAL_SECONDS_PER_DAY = 120;   // 1 game day = 2 real minutes
@@ -73,6 +74,9 @@ export function normalizeMeta(meta) {
     levels[up.id] = clamp(Number.isFinite(raw) ? Math.floor(raw) : 0, 0, up.max);
   }
   m.upgrades = levels;
+  if (!m.records || typeof m.records !== 'object') m.records = {};
+  if (!Array.isArray(m.hallOfFame)) m.hallOfFame = [];
+  m.hallOfFame = m.hallOfFame.filter((h) => h && typeof h.name === 'string').slice(0, 12);
   return m;
 }
 
@@ -244,12 +248,15 @@ export function makeProject(product, type) {
   };
 }
 
-export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Untitled Inc.', startCategory = 'mobile' } = {}) {
+export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Untitled Inc.', startCategory = 'mobile',
+  background = 'generalist', challenges = [], cofounder = null } = {}) {
   const m = normalizeMeta(meta || emptyMeta());
   const fx = metaEffects(m);
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
   const rng = makeRng(seed ?? (Date.now() & 0x7fffffff));
 
+  const bg = BACKGROUNDS.find((b) => b.id === background) || BACKGROUNDS[0];
+  const chosenChallenges = (Array.isArray(challenges) ? challenges : []).filter((c) => CHALLENGES.some((x) => x.id === c));
   const founder = makeEmployee(rng, 'founder', {
     name: 'You', skillBonus: fx.founderSkill || 0, specialty: null, morale: 0.9
   });
@@ -259,6 +266,16 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
   const employees = [founder];
   for (let i = 0; i < (fx.startEngineers || 0); i++) {
     employees.push(makeEmployee(rng, 'senior_engineer', { hiredDay: 0 }));
+  }
+  // A Loyal Co-Founder: someone from the hall of fame joins on day one.
+  if (fx.cofounder && Array.isArray(m.hallOfFame) && m.hallOfFame.length) {
+    const h = m.hallOfFame.find((x) => x.name === cofounder) || m.hallOfFame[0];
+    const role = ROLES.some((r) => r.id === h.role) ? h.role : 'engineer';
+    const e = makeEmployee(rng, role, { name: h.name, traits: (h.traits || []).filter((t) => traitById(t)), hiredDay: 0, morale: 0.95 });
+    e.skill = Math.round(Math.max(3, Math.min(12, (h.skill || 6) - 1)) * 10) / 10;
+    e.salary = Math.round((e.salary * 0.8) / 500) * 500;
+    e.story = [{ day: 0, text: `Co-founded this company, after ${h.company || 'the last one'}` }];
+    employees.push(e);
   }
 
   const startTier = fx.startTier || 'garage';
@@ -274,12 +291,15 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     seed: rng.s,
     rng,
     scenarioId: scenario.id,
+    background: bg.id,
+    challenges: chosenChallenges,
+    startCategory: startCat,
     time: { day: 0, paused: false, lastRealMs: Date.now(), startedRealMs: Date.now() },
     company: {
       name: companyName,
       stage: 'solo',
       reputation: 1 + (fx.startReputation || 0),
-      cash: 15000 + (fx.startCash || 0),
+      cash: 15000 + (fx.startCash || 0) + (bg.startCash || 0),
       founderEquity: 1,
       ownership: { soldTotal: 0, transactions: [] },
       totalRaised: 0,
@@ -298,7 +318,11 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     research: { completed: (fx.startResearch || []).slice(), active: [], points: 0 },
     funding: { rounds: [], offers: [], exitOffers: [], targets: [], perks: [], exitMods: {}, loans: [] },
     contracts: [],
-    competitors: COMPETITORS.map((c) => makeRival(c, scenario.mods || {})),
+    competitors: COMPETITORS.map((c) => {
+      const r = makeRival(c, scenario.mods || {});
+      if (chosenChallenges.includes('hard_rivals')) { r.strength = Math.min(1.2, r.strength * 1.5 + 0.1); r.valuation *= 2; r.cash *= 2; }
+      return r;
+    }),
     rivalState: { nemesis: null, wars: [], passed: [] },
     events: { pending: [], cooldown: 1.5, log: [], seen: {}, lastEventId: null, recentCats: [], scheduled: [], lastTriggered: {} },
     advisors: emptyAdvisors(),
@@ -307,7 +331,7 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     exitResult: null,
     alumni: [],
     founderActions: { ready: {}, used: 0 },
-    market: emptyMarket(),
+    market: chosenChallenges.includes('recession_start') ? { ...emptyMarket(), economy: 'recession', until: 45 } : emptyMarket(),
     boosts: [],
     stats: {
       revenueDay: 0, expenseDay: 0, payrollDay: 0, infraDay: 0, marketingDay: 0, rentDay: 0,

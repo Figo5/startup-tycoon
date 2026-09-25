@@ -259,3 +259,13 @@ ul.story li { padding: 2px 0; border-bottom: 1px dashed #2a2735; }
 .hud-chip.accent { color: var(--accent); border-color: #8a6414; }
 .perk { padding: 2px 0; color: var(--dim); }
 .perk.on { color: var(--text); }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+.ach { border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; display: grid; gap: 2px; opacity: .55; }
+.ach.on { opacity: 1; border-color: #8a6414; background: rgba(242, 177, 52, 0.06); }
+.ach.on b { color: var(--accent); }
+.ach .tag { justify-self: start; }
+.fc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.fc-opt { border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; display: grid; gap: 2px; cursor: pointer; }
+.fc-opt:has(input:checked) { border-color: var(--accent); background: rgba(242, 193, 78, 0.07); }
+.fc-opt input { justify-self: start; }
+#overlay-card { max-height: 90vh; overflow: auto; }

@@ -30,7 +30,15 @@ export const PRESTIGE_UPGRADES = [
   { id: 'deal_flow', name: 'Deal Flow', cost: 6, growth: 2.2, max: 3,
     desc: 'Enterprise contracts are 20% larger per level.', effect: { contractSize: 0.20 } },
   { id: 'exit_multiple', name: 'Reputation Premium', cost: 12, growth: 2.6, max: 4,
-    desc: 'Exits pay 15% more Founder Reputation per level.', effect: { exitRep: 0.15 } }
+    desc: 'Exits pay 15% more Founder Reputation per level.', effect: { exitRep: 0.15 } },
+  { id: 'cofounder', name: 'Loyal Co-Founder', cost: 8, growth: 1, max: 1,
+    desc: 'One of the best people from a previous company joins every new company on day one, traits and all.', effect: { cofounder: 1 } },
+  { id: 'legendary_network', name: 'Legendary Network', cost: 6, growth: 2.2, max: 3,
+    desc: 'Legendary candidates turn up more often (+1.5% per level).', effect: { legendaryTalent: 0.015 } },
+  { id: 'prime_location', name: 'Prime Location', cost: 7, growth: 2.3, max: 2,
+    desc: 'Every office fits one more room per level.', effect: { roomSlots: 1 } },
+  { id: 'venture_studio', name: 'Venture Studio', cost: 14, growth: 1, max: 1,
+    desc: 'One extra product slot at every stage, so a second product can start on day one.', effect: { productSlots: 1 } }
 ];
 
 export const prestigeById = (id) => PRESTIGE_UPGRADES.find((p) => p.id === id);

@@ -29,6 +29,10 @@ import { acquisitionOffers, integrationActive } from '../sim/acquisitions.js';
 import { goalsSummary, goalProgress } from '../sim/goals.js';
 import { GOALS as GOAL_DEFS } from '../data/goals.js';
 import { RARITIES, PACES, levelName, traitById, jobTitle } from '../data/traits.js';
+import { ACHIEVEMENTS, CHALLENGES, START_UNLOCKS, backgroundById, challengeById } from '../data/legacy.js';
+import { backgroundOptions, challengesUnlocked, startCategoriesFor } from '../sim/legacy.js';
+import { SCENARIOS } from '../data/prestige.js';
+import { metaEffects } from '../sim/state.js';
 import { traitList } from '../sim/state.js';
 import { onLeave, isBurntOut, energyTarget, fairSalary } from '../sim/workforce.js';
 import { deptPerks, activeSynergies, deptCounts } from '../sim/org.js';
@@ -75,7 +79,7 @@ const effectRow = (effects = {}) => Object.entries(effects)
 export const PANEL_TITLES = {
   company: 'Company', products: 'Products', employees: 'Employees', departments: 'Departments',
   research: 'Research', finance: 'Finance', office: 'Office', competitors: 'Market & rivals',
-  advisors: 'Advisors', goals: 'Company goals'
+  advisors: 'Advisors', goals: 'Company goals', legacy: 'Founder legacy'
 };
 
 // ---------------------------------------------------------------- Company
@@ -119,13 +123,15 @@ export function company(ctx) {
     <hr />` : exits.some((e) => e.available) ? `
     <h3>Exit</h3>
     <p class="muted small">Ending the run converts your stake into Founder Reputation, which is permanent.
-    An exit sells 100% of the stake you still hold, once: it cannot be taken again afterwards.</p>
+    An exit sells 100% of the stake you still hold, once: it cannot be taken again afterwards. Smaller exits are
+    always on the table; the big ones need the Late Stage or a buyer who comes to you.</p>
     <div class="grid two">${exits.map((e) => `
       <div class="tile">
         <h3>${esc(e.name)}<span class="tag">${e.rep} FR</span></h3>
         <p>${esc(e.blurb)}</p>
         <div class="spread small"><span>Company value</span><b>${money(e.value)}</b></div>
         <div class="spread small"><span>Your ${pct(state.company.founderEquity)} stake</span><b>${money(e.proceeds)}</b></div>
+        ${e.partner ? `<div class="small muted">With ${esc(e.partner)}</div>` : ''}
         ${btn('exit', e.available ? `Take the ${e.name}` : e.reason || 'Unavailable', { id: e.id, disabled: !e.available })}
       </div>`).join('')}</div><hr />` : '';
 
@@ -869,4 +875,96 @@ function fmtGoal(def, p) {
   return `${Math.floor(p.have)} / ${p.need}`;
 }
 
-export const PANELS = { company, products, employees, departments, research, finance, office, competitors, advisors, goals };
+// ------------------------------------------------------------------ Legacy
+export function legacy(ctx) {
+  const { state } = ctx;
+  const meta = state.meta;
+  const r = meta.records || {};
+  const earned = new Set(meta.achievements || []);
+  const bgs = backgroundOptions(meta);
+  const bg = backgroundById(state.background);
+  const cats = startCategoriesFor(meta);
+  const nextCats = START_UNLOCKS.find((u) => u.exits > (meta.runs || []).length);
+  return `
+    <div class="grid two">
+      <div class="tile"><h3>Founder Reputation<span class="tag" style="color:var(--accent)">${Math.floor(meta.founderRep)} FR</span></h3>
+        <div class="spread small"><span>Earned in total</span><b>${Math.floor(meta.lifetimeRep)} FR</b></div>
+        <div class="spread small"><span>Companies finished</span><b>${(meta.runs || []).length}</b></div>
+        <div class="spread small"><span>Achievements</span><b>${earned.size} / ${ACHIEVEMENTS.length}</b></div>
+        ${btn('open-prestige', 'Spend on founder upgrades', { cls: 'btn' })}
+      </div>
+      <div class="tile"><h3>This company</h3>
+        <div class="spread small"><span>Founder background</span><b>${esc(bg.name)}</b></div>
+        <div class="small">${effectRow(bg.mods)}</div>
+        <div class="spread small"><span>Challenges</span><b>${(state.challenges || []).length ? state.challenges.map((c) => esc(challengeById(c)?.name || c)).join(', ') : 'none'}</b></div>
+        <div class="spread small"><span>Market</span><b>${esc((SCENARIOS.find((x) => x.id === state.scenarioId) || SCENARIOS[0]).name)}</b></div>
+      </div>
+    </div>
+    <hr />
+    <h3>Records</h3>
+    ${r.exits ? `<div class="grid two"><div class="tile">
+      <div class="spread small"><span>Best valuation at exit</span><b>${money(r.bestValuation || 0)}</b></div>
+      <div class="spread small"><span>Best proceeds</span><b>${money(r.bestProceeds || 0)}</b></div>
+      <div class="spread small"><span>Fastest exit</span><b>${r.fastestExit ?? '-'} days</b></div></div>
+      <div class="tile"><div class="spread small"><span>Largest team</span><b>${r.mostPeople || 0} people</b></div>
+      <div class="spread small"><span>Best revenue day</span><b>${money(r.bestRevenueDay || 0)}</b></div>
+      <div class="spread small"><span>Exits</span><b>${r.exits}</b></div></div></div>` : '<p class="muted small">Records start with your first exit.</p>'}
+    <hr />
+    <h3>Achievements<span class="tag">${earned.size}/${ACHIEVEMENTS.length}</span></h3>
+    <p class="muted small">The harder ones pay a little Founder Reputation, once ever. Some unlock founder backgrounds.</p>
+    <div class="ach-grid">${ACHIEVEMENTS.map((a) => `<div class="ach ${earned.has(a.id) ? 'on' : ''}" title="${esc(a.desc)}">
+      <b>${earned.has(a.id) ? '★' : '☆'} ${esc(a.name)}</b><span class="small">${esc(a.desc)}</span>${a.fr ? `<span class="tag">+${a.fr} FR</span>` : ''}</div>`).join('')}</div>
+    <hr />
+    <h3>Founder backgrounds</h3>
+    <p class="muted small">Chosen when you found a company. Every background has a cost; the stronger ones are earned.</p>
+    <div class="grid two">${bgs.map((b) => `<div class="tile" style="${b.unlocked ? '' : 'opacity:.55'}">
+      <h3>${esc(b.name)}${b.unlocked ? '' : '<span class="tag">locked</span>'}</h3><p class="small">${esc(b.desc)}</p>
+      <div class="small">${effectRow(b.mods)}${b.startCash ? ` <span class="tag">+${money(b.startCash)} start</span>` : ''}</div>
+      ${b.unlocked ? '' : `<p class="small muted">Unlock: ${esc(b.hint || '')}</p>`}</div>`).join('')}</div>
+    <hr />
+    <h3>Challenges</h3>
+    ${challengesUnlocked(meta) ? '' : '<p class="muted small">Challenges unlock after your first exit.</p>'}
+    <div class="grid two">${CHALLENGES.map((c) => `<div class="tile"><h3>${esc(c.name)}<span class="tag" style="color:var(--accent)">+${Math.round(c.frMul * 100)}% FR</span></h3><p class="small">${esc(c.desc)}</p></div>`).join('')}</div>
+    <hr />
+    <h3>Starting products</h3>
+    <p class="small">Available: ${cats.map((c) => esc(categoryById(c)?.name || c)).join(', ')}.</p>
+    ${nextCats ? `<p class="small muted">Finish ${nextCats.exits} compan${nextCats.exits === 1 ? 'y' : 'ies'} to start with ${nextCats.cats.map((c) => esc(categoryById(c)?.name || c)).join(' or ')}.</p>` : ''}
+    ${(meta.hallOfFame || []).length ? `<hr /><h3>Hall of fame</h3>
+      <p class="muted small">The best people from companies you sold.${metaEffects(meta).cofounder ? ' One of them co-founds each new company with you.' : ' The Loyal Co-Founder upgrade brings one of them into every new company.'}</p>
+      <table><tbody>${meta.hallOfFame.slice(0, 8).map((h) => `<tr><td>${esc(h.name)}</td><td>${esc(jobTitle(h.skill, roleById(h.role)?.name))}</td><td>${(h.traits || []).map((t) => traitById(t)).filter(Boolean).map(traitTag).join('')}</td><td class="small muted">${esc(h.company || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+    <hr />
+    <h3>Previous companies</h3>
+    ${(meta.runs || []).length ? `<table><thead><tr><th>Company</th><th>Exit</th><th class="num">Proceeds</th><th class="num">FR</th><th class="num">Days</th></tr></thead><tbody>
+      ${meta.runs.slice(0, 12).map((x) => `<tr><td>${esc(x.company)}</td><td>${esc(x.exit)}</td><td class="num">${money(x.proceeds)}</td><td class="num">${x.rep}</td><td class="num">${x.days}</td></tr>`).join('')}
+    </tbody></table>` : '<p class="muted small">None yet.</p>'}`;
+}
+
+/** The form for founding a new company: product, background, market, challenges. */
+export function foundCompanyForm(meta, { name = '', title = 'Found a company', note = '' } = {}) {
+  const cats = startCategoriesFor(meta);
+  const bgs = backgroundOptions(meta).filter((b) => b.unlocked);
+  const scen = SCENARIOS.filter((s) => (meta.runs || []).length >= s.unlockRuns);
+  const fx = metaEffects(meta);
+  return `<h2>${esc(title)}</h2>
+    ${note ? `<p class="muted small">${esc(note)}</p>` : ''}
+    <label class="small">Company name <input type="text" id="fc-name" value="${esc(name)}" /></label>
+    <h3 style="margin-top:10px">First product</h3>
+    <div class="fc-grid">${cats.map((c, i) => { const cat = categoryById(c); return `<label class="fc-opt"><input type="radio" name="fc-cat" value="${c}"${i === 0 ? ' checked' : ''} />
+      <b>${esc(cat.name)}</b><span class="small">${esc(cat.strategy || cat.blurb)}</span></label>`; }).join('')}</div>
+    <h3 style="margin-top:10px">Your background</h3>
+    <div class="fc-grid">${bgs.map((b, i) => `<label class="fc-opt"><input type="radio" name="fc-bg" value="${b.id}"${i === 0 ? ' checked' : ''} />
+      <b>${esc(b.name)}</b><span class="small">${esc(b.desc)}</span></label>`).join('')}</div>
+    <h3 style="margin-top:10px">Market</h3>
+    <select id="fc-scen">${scen.map((s) => `<option value="${s.id}">${esc(s.name)} — ${esc(s.desc)} (${s.repMul}x FR)</option>`).join('')}</select>
+    ${challengesUnlocked(meta) ? `<h3 style="margin-top:10px">Challenges <span class="muted small">(optional, more Founder Reputation)</span></h3>
+      <div class="fc-grid">${CHALLENGES.map((c) => `<label class="fc-opt"><input type="checkbox" name="fc-ch" value="${c.id}" />
+        <b>${esc(c.name)} <span style="color:var(--accent)">+${Math.round(c.frMul * 100)}%</span></b><span class="small">${esc(c.desc)}</span></label>`).join('')}</div>` : ''}
+    ${fx.cofounder && (meta.hallOfFame || []).length ? `<h3 style="margin-top:10px">Co-founder</h3>
+      <select id="fc-co">${meta.hallOfFame.slice(0, 8).map((h) => `<option value="${esc(h.name)}">${esc(h.name)} — ${esc(jobTitle(h.skill, roleById(h.role)?.name))}${(h.traits || []).length ? ` (${h.traits.map((t) => traitById(t)?.name || t).join(', ')})` : ''}</option>`).join('')}</select>` : ''}
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="fc-go">Found it</button>
+      <button class="btn secondary" data-act="close-overlay">Cancel</button>
+    </div>`;
+}
+
+export const PANELS = { company, products, employees, departments, research, finance, office, competitors, advisors, goals, legacy };
