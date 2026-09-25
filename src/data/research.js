@@ -11,8 +11,16 @@ export const RESEARCH_CATEGORIES = [
   { id: 'support', name: 'Customer Support', color: 0x81c784 },
   { id: 'culture', name: 'Company Culture', color: 0xa1887f },
   { id: 'ai', name: 'AI-Assisted Development', color: 0xe57373 },
-  { id: 'cloud', name: 'Cloud Optimization', color: 0x4fc3f7 }
+  { id: 'cloud', name: 'Cloud Optimization', color: 0x4fc3f7 },
+  { id: 'strategy', name: 'Company Doctrine (choose one of each pair)', color: 0xf2c14e },
+  { id: 'finance', name: 'Finance & Intelligence', color: 0x90a4ae }
 ];
+
+// Exclusive groups: researching one side of a doctrine locks the other for the
+// rest of the company. These are where a build is decided.
+export const DOCTRINES = {
+  pace: 'How you build', growth: 'How you grow', workplace: 'Where you work', platform: 'What you own'
+};
 
 export const RESEARCH = [
   // --- Development tooling ---
@@ -103,7 +111,49 @@ export const RESEARCH = [
   { id: 'finops', cat: 'cloud', name: 'FinOps Practice', cost: 620000, days: 8, req: ['reserved'],
     desc: 'Someone finally owns the bill.', mods: { infraCost: -0.20, payroll: -0.03 } },
   { id: 'custom_silicon', cat: 'cloud', name: 'Custom Silicon', cost: 19e6, days: 16, req: ['finops'], stage: 'major',
-    desc: 'Your own accelerators. Absurd up front, transformative after.', mods: { infraCost: -0.35, capacityPerUnit: 0.50 } }
+    desc: 'Your own accelerators. Absurd up front, transformative after.', mods: { infraCost: -0.35, capacityPerUnit: 0.50 } },
+
+  // --- Doctrines: pick a side ---
+  { id: 'move_fast', cat: 'strategy', exclusive: 'pace', name: 'Move Fast', cost: 60000, days: 5, req: [], stage: 'seed',
+    desc: 'Ship first, fix later. Much faster engineering; debt piles up and launches are shakier.',
+    mods: { devSpeed: 0.16, debtRate: 0.25, launch: -0.04 } },
+  { id: 'craftsmanship', cat: 'strategy', exclusive: 'pace', name: 'Craftsmanship', cost: 60000, days: 5, req: [], stage: 'seed',
+    desc: 'Do it properly. Better projects, far less debt, launches land harder; a little slower.',
+    mods: { projectQuality: 0.15, debtRate: -0.25, launch: 0.06, devSpeed: -0.05 } },
+  { id: 'product_led', cat: 'strategy', exclusive: 'growth', name: 'Product-Led Growth', cost: 240000, days: 6, req: [], stage: 'growing',
+    desc: 'The product sells itself. Conversion and marketing up; salespeople matter less.',
+    mods: { conversion: 0.14, marketing: 0.12, sales: -0.12 } },
+  { id: 'sales_led', cat: 'strategy', exclusive: 'growth', name: 'Sales-Led Growth', cost: 240000, days: 6, req: [], stage: 'growing',
+    desc: 'Every deal is worked. Sales and contracts up; self-serve conversion down.',
+    mods: { sales: 0.22, contractSize: 0.15, enterpriseConv: 0.1, conversion: -0.05 } },
+  { id: 'remote_first', cat: 'strategy', exclusive: 'workplace', name: 'Remote-First', cost: 300000, days: 6, req: [], stage: 'growing',
+    desc: 'Hire anywhere. Headcount stops depending on desks and people rest better; coordination suffers.',
+    mods: { deskBonus: 24, rest: 0.05, deptBonus: -0.05 } },
+  { id: 'campus_culture', cat: 'strategy', exclusive: 'workplace', name: 'Campus Culture', cost: 300000, days: 6, req: [], stage: 'growing',
+    desc: 'Everyone together. Departments and managers work better and people stay longer.',
+    mods: { deptBonus: 0.07, managerBonus: 0.1, staffChurn: -0.2, moraleGain: 0.03 } },
+  { id: 'open_platform', cat: 'strategy', exclusive: 'platform', name: 'Open Platform', cost: 1.4e6, days: 8, req: [], stage: 'scaleup',
+    desc: 'APIs, partners, an ecosystem. Every market grows; you capture a little less of it.',
+    mods: { marketSize: 0.14, revenue: -0.04, reputationGain: 0.15 } },
+  { id: 'walled_garden', cat: 'strategy', exclusive: 'platform', name: 'Walled Garden', cost: 1.4e6, days: 8, req: [], stage: 'scaleup',
+    desc: 'Own the whole experience. More revenue per customer and fewer leave; the market is a little smaller.',
+    mods: { revenue: 0.09, churn: -0.06, marketSize: -0.05 } },
+
+  // --- Nodes that change how things work ---
+  { id: 'launch_playbook', cat: 'marketing', name: 'Launch Playbook', cost: 95000, days: 5, req: ['content'],
+    desc: 'Every launch is run like an operation: press, waitlists, a countdown. Launches land better.', mods: { launch: 0.08 } },
+  { id: 'growth_loops', cat: 'analytics', name: 'Growth Loops', cost: 380000, days: 7, req: ['experimentation'],
+    desc: 'Invites, sharing, templates. Word of mouth compounds harder in every product.', mods: { viral: 0.25 } },
+  { id: 'wellness', cat: 'culture', name: 'Wellness Program', cost: 140000, days: 5, req: ['handbook'],
+    desc: 'Real time off, real health cover. Everyone recovers energy faster; burnout is rarer.', mods: { rest: 0.08, moraleGain: 0.02 } },
+  { id: 'talent_brand', cat: 'automation', name: 'Talent Brand', cost: 260000, days: 6, req: ['applicant_tracking'],
+    desc: 'People want to work here. More candidates, and more legendary ones.', mods: { candidateSlots: 1, legendaryTalent: 0.02 } },
+  { id: 'secops', cat: 'infra', name: 'Security Operations Center', cost: 520000, days: 8, req: ['cdn'], stage: 'growing',
+    desc: 'Round-the-clock monitoring. No product ever falls below 60% security.', mods: {}, flags: ['secops'] },
+  { id: 'rival_intel', cat: 'finance', name: 'Competitive Intelligence', cost: 180000, days: 6, req: [], stage: 'seed',
+    desc: 'Know what rivals ship before they ship it. Rivals take a quarter less of your markets.', mods: { rivalPressure: -0.25 } },
+  { id: 'treasury', cat: 'finance', name: 'Treasury Management', cost: 350000, days: 6, req: [], stage: 'growing',
+    desc: 'Idle cash goes to work: it earns 4% a year, paid daily.', mods: {}, flags: ['treasury'] }
 ];
 
 export const researchById = (id) => RESEARCH.find((r) => r.id === id);

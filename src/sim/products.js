@@ -21,7 +21,8 @@ export function rivalPressure(state, categoryId) {
     if (!c.alive || c.acquired) continue;
     share += c.shares[categoryId] || 0;
   }
-  return clamp(share * 0.45, 0, 0.5);
+  const intel = 1 + Math.max(-0.6, state.modCache?.rivalPressure || 0);
+  return clamp(share * 0.45 * intel, 0, 0.5);
 }
 
 export function marketCap(state, mods, product) {
@@ -250,7 +251,7 @@ export function tickProducts(state, mods, wf, days, log) {
     const qualityMul = 0.45 + 0.85 * p.quality;
     // A social product is worth more with every user: growth accelerates with scale.
     const network = cat.network ? 1 + clamp(Math.log10(Math.max(1, p.users / 2000)), 0, 3) * 0.12 : 1;
-    const organic = cat.growth * (1 + cat.viral * (p.quality - 0.5)) * qualityMul * network;
+    const organic = cat.growth * (1 + cat.viral * mul(mods, 'viral') * (p.quality - 0.5)) * qualityMul * network;
     // Marketing saturates: the more you pour into one market, the less each dollar buys.
     const spend = budget * share;
     const diminish = 1 / (1 + spend / Math.max(250, cap * 0.02));
@@ -310,6 +311,9 @@ export function tickProducts(state, mods, wf, days, log) {
     if (outage) rev *= 0.55;
     p.revenueDay = rev;
     revenue += rev;
+
+    // A security operations center never lets a product drift below 60%.
+    if (has(mods, 'secops') && p.security < 0.6) p.security = 0.6;
 
     // --- decay ---
     p.quality = clamp(p.quality - 0.0016 * days, 0, 1);

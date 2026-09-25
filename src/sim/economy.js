@@ -62,8 +62,11 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   const advisors = advisorRetainerDay(state);
   const roadmap = roadmapRunDay(state);
   const penalties = slaPenalty(state, 1);
+  // Treasury management: idle cash earns interest.
+  const interest = mods.flags?.has?.('treasury') ? Math.max(0, state.company.cash) * 0.04 / 365 : 0;
+  state.stats.interestDay = interest;
 
-  const revDay = revenue + contracts + acquired - penalties;
+  const revDay = revenue + contracts + acquired + interest - penalties;
   let expDay = wf.payrollDay + infraCost + marketing + rent + misc + advisors + roadmap;
 
   st.revenueDay = revDay;

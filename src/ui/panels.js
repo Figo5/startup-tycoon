@@ -4,7 +4,7 @@ import { DEPARTMENTS, departmentById, roleById, ROLES } from '../data/roles.js';
 import { PROJECT_TYPES, categoryById, CUSTOMER_CLASSES, APPROACHES, approachById } from '../data/products.js';
 import { trendFor, economyNow, ensureMarket } from '../sim/market.js';
 import { ECONOMY, trendDefById } from '../data/market.js';
-import { RESEARCH, RESEARCH_CATEGORIES, researchById } from '../data/research.js';
+import { RESEARCH, RESEARCH_CATEGORIES, researchById, DOCTRINES } from '../data/research.js';
 import { OFFICE_TIERS, ROOMS } from '../data/office.js';
 import { PRESTIGE_UPGRADES } from '../data/prestige.js';
 import {
@@ -65,12 +65,13 @@ const EFFECT_LABELS = {
   projectQuality: 'project outcomes', fundingValuation: 'investor valuations', valuation: 'valuation',
   reputationGain: 'reputation growth', capacityPerUnit: 'capacity per unit', managerBonus: 'manager effect',
   deptBonus: 'department effect', moraleGain: 'morale', candidateSlots: 'candidate slots',
+  launch: 'launch outcomes', viral: 'word of mouth', rivalPressure: 'rival pressure', revenue: 'revenue',
   rest: 'team energy', legendaryTalent: 'legendary candidates'
 };
 
 function effectChip(k, v) {
   const shown = ABS_EFFECTS.has(k) ? `${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}` : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
-  const good = k === 'techDebt' || k === 'churn' || k === 'churnMul' || k === 'payroll' || k === 'infraCost' || k === 'outageRisk' || k === 'staffChurn' || k === 'supportLoadMod' ? v < 0 : v > 0;
+  const good = ['techDebt', 'churn', 'churnMul', 'payroll', 'infraCost', 'outageRisk', 'outageDuration', 'staffChurn', 'supportLoadMod', 'debtRate', 'rivalPressure'].includes(k) ? v < 0 : v > 0;
   return `<span class="tag" style="color:var(--${good ? 'good' : 'bad'});border-color:var(--${good ? 'good' : 'bad'})">${esc(shown)} ${esc(EFFECT_LABELS[k] || k)}</span>`;
 }
 const effectRow = (effects = {}) => Object.entries(effects)
@@ -493,9 +494,10 @@ export function research(ctx) {
     const items = RESEARCH.filter((r) => r.cat === cat.id).map((r) => {
       const s = researchStatus(state, mods, r.id);
       const done = s.state === 'done';
-      return `<div class="tile" style="${done ? 'opacity:.6' : ''}">
-        <h3>${esc(r.name)}<span class="tag">${done ? 'done' : money(r.cost)}</span></h3>
+      return `<div class="tile" style="${done ? (r.exclusive ? 'border-color:var(--accent)' : 'opacity:.6') : s.excluded ? 'opacity:.4' : ''}">
+        <h3>${esc(r.name)}<span class="tag">${done ? 'done' : money(r.cost)}</span>${r.exclusive ? `<span class="tag" style="color:var(--accent)">${esc(DOCTRINES[r.exclusive])}</span>` : ''}</h3>
         <p>${esc(r.desc)}</p>
+        ${Object.keys(r.mods || {}).length ? `<div class="small">${effectRow(r.mods)}</div>` : ''}
         <div class="small muted">${fmtDuration(r.days)} of research${r.req.length ? ` · after ${r.req.map((q) => researchById(q).name).join(', ')}` : ''}</div>
         ${done ? '' : btn('research', s.state === 'available' ? 'Start research' : (s.reason || labelState(s.state)), { id: r.id, disabled: s.state !== 'available', cls: 'btn secondary' })}
       </div>`;
@@ -529,8 +531,9 @@ export function finance(ctx) {
     ['Advisors', -(st.advisorDay || 0), 'down'],
     ['Roadmap work', -(st.roadmapDay || 0), 'down'],
     ['Tools & overhead', -(st.miscDay || 0), 'down'],
-    ['Loan repayment', -(st.loanDay || 0), 'down']
-  ].filter(([l, v]) => l !== 'Loan repayment' || v !== 0);
+    ['Loan repayment', -(st.loanDay || 0), 'down'],
+    ['Interest on cash', st.interestDay || 0, 'up']
+  ].filter(([l, v]) => !['Loan repayment', 'Interest on cash'].includes(l) || v !== 0);
 
   return `
     <div class="grid two">

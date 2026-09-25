@@ -11,6 +11,11 @@ export function researchStatus(state, mods, id) {
   if (!r) return { state: 'unknown' };
   if (state.research.completed.includes(id)) return { state: 'done' };
   if (state.research.active.some((a) => a.id === id)) return { state: 'active' };
+  if (r.exclusive) {
+    const other = RESEARCH.find((x) => x.exclusive === r.exclusive && x.id !== id
+      && (state.research.completed.includes(x.id) || state.research.active.some((a) => a.id === x.id)));
+    if (other) return { state: 'locked', reason: `You chose ${other.name}`, excluded: true };
+  }
   const missing = r.req.filter((q) => !state.research.completed.includes(q));
   if (missing.length) return { state: 'locked', reason: `Needs ${missing.map((q) => researchById(q).name).join(', ')}` };
   if (r.stage && stageOrder(state.company.stage) < stageOrder(r.stage)) {
