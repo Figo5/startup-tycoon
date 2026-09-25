@@ -7,6 +7,7 @@ import { ensureAcquisitions } from './acquisitions.js';
 import { COMPETITORS } from '../data/competitors.js';
 import { ensureMarket } from './market.js';
 import { ensureFunding } from './funding.js';
+import { ensureFounderActions } from './org.js';
 import { makeRival, normalizeRival, ensureRivalState } from './competitors.js';
 import { SCENARIOS } from '../data/prestige.js';
 
@@ -115,6 +116,7 @@ export function applyRunDefaults(s) {
   if (!Array.isArray(s.alumni)) s.alumni = [];
   ensureMarket(s);
   ensureFunding(s);
+  ensureFounderActions(s);
   for (const p of s.products || []) {
     if (!['rush', 'standard', 'polish'].includes(p.approach)) p.approach = 'standard';
     if (!Number.isFinite(p.featuresSinceMajor)) p.featuresSinceMajor = 0;

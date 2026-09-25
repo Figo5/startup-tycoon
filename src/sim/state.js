@@ -305,6 +305,7 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     acquisitions: emptyAcquisitions(),
     exitResult: null,
     alumni: [],
+    founderActions: { ready: {}, used: 0 },
     market: emptyMarket(),
     boosts: [],
     stats: {

@@ -1,4 +1,4 @@
-import { OFFICE_TIERS, ROOMS, tierById, tierIndex, roomById } from '../data/office.js';
+import { OFFICE_TIERS, ROOMS, tierById, tierIndex, roomById, roomSlots } from '../data/office.js';
 import { stageOrder } from '../data/stages.js';
 import { flat } from './modifiers.js';
 
@@ -31,16 +31,29 @@ export function upgradeOffice(state) {
 
 export function roomOptions(state) {
   const cur = tierIndex(state.office.tier);
+  const full = state.office.rooms.length >= roomSlots(state.office.tier);
   return ROOMS.map((r) => {
     const owned = state.office.rooms.includes(r.id);
     const tierOk = cur >= tierIndex(r.minTier);
     return {
       ...r, owned,
-      available: !owned && tierOk && state.company.cash >= r.cost,
+      available: !owned && tierOk && !full && state.company.cash >= r.cost,
       reason: owned ? null : !tierOk ? `Needs the ${tierById(r.minTier).name}`
-        : state.company.cash < r.cost ? 'Not enough cash' : null
+        : full ? `No room left (${roomSlots(state.office.tier)} slots)` : state.company.cash < r.cost ? 'Not enough cash' : null
     };
   });
+}
+
+/** Daily upkeep of every room built. Paid with the rent. */
+export function roomUpkeep(state) {
+  return state.office.rooms.reduce((a, id) => a + (roomById(id)?.upkeep || 0), 0);
+}
+
+/** Knock a room down to free its slot. Nothing is refunded. */
+export function removeRoom(state, id) {
+  if (!state.office.rooms.includes(id)) return { ok: false, reason: 'Not built.' };
+  state.office.rooms = state.office.rooms.filter((r) => r !== id);
+  return { ok: true };
 }
 
 export function buyRoom(state, id) {

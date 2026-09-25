@@ -7,7 +7,7 @@ import { hire, fire, promote, reassign, setManager, sendOnLeave, setPace, giveRa
 import { queueProject, createProduct, setApproach, sellProduct, productSalePrice } from '../sim/products.js';
 import { startResearch, cancelResearch } from '../sim/research.js';
 import { raise, takeLoan } from '../sim/funding.js';
-import { upgradeOffice, buyRoom } from '../sim/office.js';
+import { upgradeOffice, buyRoom, removeRoom } from '../sim/office.js';
 import { acquire } from '../sim/competitors.js';
 import { setCapacity, computeLoad } from '../sim/infra.js';
 import { performExit } from '../sim/prestige.js';
@@ -18,6 +18,11 @@ import { hireAdvisor, dismissAdvisor } from '../sim/advisors.js';
 import { acquireCompany } from '../sim/acquisitions.js';
 import { acceptGoal, abandonGoal } from '../sim/goals.js';
 import { playMinigame, MINIGAMES } from '../minigames/index.js';
+import { founderActionStatus, useFounderAction } from '../sim/org.js';
+import { stageProgress } from '../sim/stages.js';
+import { economyNow, trendFor } from '../sim/market.js';
+import { paceById } from '../data/traits.js';
+import { approachById } from '../data/products.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -36,8 +41,11 @@ export function createUI(app) {
     company: $('#company-name'), stage: $('#stage-chip'), stats: $('#stats'),
     events: $('#events'), feed: $('#feed'), tabs: $('#tabs'),
     drawer: $('#drawer'), drawerTitle: $('#drawer-title'), drawerBody: $('#drawer-body'),
-    overlay: $('#overlay'), overlayCard: $('#overlay-card'), pause: $('#btn-pause')
+    overlay: $('#overlay'), overlayCard: $('#overlay-card'), pause: $('#btn-pause'),
+    founderBar: $('#founder-bar'), hud: $('#office-hud')
   };
+  let lastBarSig = '';
+  let lastHudSig = '';
   let openPanel = null;
   let lastEventSig = '';
   let lastPanelHtml = '';
@@ -82,6 +90,54 @@ export function createUI(app) {
     } else {
       els.pause.disabled = false;
     }
+  }
+
+  // ------------------------------------------------------- founder bar
+  function renderFounderBar() {
+    if (!els.founderBar) return;
+    const s = app.state;
+    const acts = founderActionStatus(s).filter((a) => !a.locked);
+    const sig = acts.map((a) => `${a.id}:${a.available}:${Math.ceil(Math.max(0, a.readyAt - s.time.day) * 10)}`).join('|');
+    if (sig === lastBarSig) return;
+    lastBarSig = sig;
+    els.founderBar.innerHTML = acts.map((a) => {
+      const left = Math.max(0, a.readyAt - s.time.day);
+      const frac = a.cooling ? 1 - left / a.cooldown : 1;
+      return `<button class="fa${a.available ? '' : ' off'}" data-act="founder-action" data-id="${a.id}"${a.available ? '' : ' disabled'}
+        title="${escapeHtml(a.name)} (${a.key}) — ${escapeHtml(a.desc)}${a.reason ? ` [${escapeHtml(a.reason)}${a.cooling ? `: ${fmtDuration(left)}` : ''}]` : ''}">
+        <span class="fa-key">${a.key}</span><span class="fa-name">${escapeHtml(a.name)}</span>
+        <i style="width:${Math.round(frac * 100)}%"></i></button>`;
+    }).join('');
+  }
+
+  // --------------------------------------------------------------- hud
+  function renderHud() {
+    if (!els.hud) return;
+    const s = app.state;
+    const prog = stageProgress(s);
+    const building = s.products.filter((p) => p.projects.length).slice(0, 3).map((p) => {
+      const j = p.projects[0];
+      return { n: `${p.name}: ${j.name}`, pct: j.done / Math.max(1, j.work), ap: j.approach };
+    });
+    const chips = [];
+    const econ = economyNow(s);
+    if (s.time.day >= 18 && econ.id !== 'normal') chips.push([econ.name, econ.id === 'boom' ? 'good' : 'bad']);
+    for (const cat of new Set(s.products.map((p) => p.category))) {
+      const t = trendFor(s, cat);
+      if (t) chips.push([t.name, t.negative ? 'bad' : 'good']);
+    }
+    const pace = paceById(s.company.pace);
+    if (pace.id !== 'normal') chips.push([pace.name, pace.id === 'crunch' ? 'bad' : 'good']);
+    for (const p of s.products) if (p.hype && p.hype.until > s.time.day) chips.push([`${p.name}: ${p.hype.label}`, 'accent']);
+    const target = (s.funding.targets || []).find((t) => t.status === 'open');
+    if (target) chips.push([`Board target ${fmtDuration(Math.max(0, target.deadline - s.time.day))}`, 'warn']);
+    const sig = JSON.stringify([prog?.stage.id, Math.round((prog?.pct || 0) * 50), building.map((b) => [b.n, Math.round(b.pct * 40)]), chips]);
+    if (sig === lastHudSig) return;
+    lastHudSig = sig;
+    els.hud.innerHTML = `
+      ${prog ? `<div class="hud-row"><span>Next: ${escapeHtml(prog.stage.name)}</span><span class="hud-bar"><i style="width:${Math.round(prog.pct * 100)}%"></i></span></div>` : ''}
+      ${building.map((b) => `<div class="hud-row small"><span>${escapeHtml(b.n)}${b.ap && b.ap !== 'standard' ? ` (${escapeHtml(approachById(b.ap).name)})` : ''}</span><span class="hud-bar work"><i style="width:${Math.round(b.pct * 100)}%"></i></span></div>`).join('')}
+      ${chips.length ? `<div class="hud-chips">${chips.map(([t, k]) => `<span class="hud-chip ${k}">${escapeHtml(t)}</span>`).join('')}</div>` : ''}`;
   }
 
   // ------------------------------------------------------------ events
@@ -245,6 +301,10 @@ export function createUI(app) {
       case 'loan': { const r = takeLoan(s); done(r, r.ok ? `Borrowed ${money(r.principal)}.` : null); break; }
       case 'office': done(upgradeOffice(s), 'New office. Everyone is moving desks.'); break;
       case 'room': done(buyRoom(s, id), 'Built.'); break;
+      case 'room-remove': {
+        if (!confirm('Knock this room down? The slot is freed; nothing is refunded.')) return;
+        done(removeRoom(s, id), 'Room removed.'); break;
+      }
       case 'acquire': done(acquire(s, mods, id), 'Acquisition complete.'); break;
       case 'acquire-company': {
         const r = acquireCompany(s, mods, id);
@@ -289,6 +349,11 @@ export function createUI(app) {
         showOverlay(prestige(ctx()));
         done(r, r.ok ? `${id.replace(/_/g, ' ')} is now level ${r.level}.` : null);
         break;
+      }
+      case 'founder-action': {
+        const r = useFounderAction(s, id, app.log);
+        if (r.ok) app.game?.scene?.getScene('office')?.founderAction?.(id);
+        done(r); lastBarSig = ''; renderFounderBar(); break;
       }
       case 'exit': app.onExit(id); break;
       case 'exit-summary': app.showExitSummary(); break;
@@ -345,10 +410,14 @@ export function createUI(app) {
     const n = e.key === '0' ? 10 : Number(e.key);
     if (n >= 1 && n <= PANEL_ORDER.length && els.overlay.hidden) showPanel(PANEL_ORDER[n - 1]);
     if (e.key === '?') app.showHelp();
+    if (els.overlay.hidden && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const fa = founderActionStatus(app.state).find((a) => a.key.toLowerCase() === e.key.toLowerCase());
+      if (fa) dispatch('founder-action', fa.id, null);
+    }
   });
 
   return {
-    render() { renderTop(); renderEvents(); renderPanel(); },
+    render() { renderTop(); renderEvents(); renderPanel(); renderFounderBar(); renderHud(); },
     renderPanelNow() { renderPanel(true); },
     pushFeed, showOverlay, hideOverlay, showPanel, hidePanel,
     get openPanel() { return openPanel; }

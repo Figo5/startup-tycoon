@@ -7,6 +7,7 @@ import { acquiredRevenue } from './acquisitions.js';
 import { advisorRetainerDay } from './advisors.js';
 import { roadmapRunDay } from './roadmap.js';
 import { loanRepayment } from './funding.js';
+import { roomUpkeep } from './office.js';
 
 export const MISC_COST_PER_EMPLOYEE_DAY = 6;
 
@@ -47,7 +48,7 @@ export function valuation(state, mods) {
 export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   const st = state.stats;
   const tier = tierById(state.office.tier);
-  const rent = tier ? tier.rent : 0;
+  const rent = (tier ? tier.rent : 0) + roomUpkeep(state);
   const marketing = Math.max(0, state.company.marketingBudget);
   const misc = state.employees.length * MISC_COST_PER_EMPLOYEE_DAY;
   const contracts = contractRevenue(state);

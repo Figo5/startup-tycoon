@@ -16,7 +16,8 @@ import { computeWorkforce, deskPressure, marketSalary, prioritySplit, hireCost }
 import { researchStatus, researchSlots } from '../sim/research.js';
 import { fundingOffers, loanOffer } from '../sim/funding.js';
 import { exitPreview, prestigeLevels } from '../sim/prestige.js';
-import { officeOptions, roomOptions } from '../sim/office.js';
+import { officeOptions, roomOptions, roomUpkeep } from '../sim/office.js';
+import { roomSlots } from '../data/office.js';
 import { acquisitionTargets, marketShares, leaderboard } from '../sim/competitors.js';
 import { PERSONALITIES } from '../data/competitors.js';
 import { effectiveCapacity, UNIT_COST_DAY } from '../sim/infra.js';
@@ -30,6 +31,7 @@ import { GOALS as GOAL_DEFS } from '../data/goals.js';
 import { RARITIES, PACES, levelName, traitById, jobTitle } from '../data/traits.js';
 import { traitList } from '../sim/state.js';
 import { onLeave, isBurntOut, energyTarget, fairSalary } from '../sim/workforce.js';
+import { deptPerks, activeSynergies, deptCounts } from '../sim/org.js';
 
 export const traitTag = (t) => `<span class="tag trait trait-${t.rarity}" title="${String(t.desc).replace(/"/g, '&quot;')}">${t.rarity === 'legendary' ? '★ ' : t.rarity === 'rare' ? '◆ ' : ''}${String(t.name)}</span>`;
 const traitTags = (e) => traitList(e).map(traitTag).join('');
@@ -433,7 +435,13 @@ export function departments(ctx) {
   const order = stageOrder(state.company.stage);
   const managers = state.employees.filter((e) => e.isManager);
 
-  return `<p class="muted small">Priorities change what a department spends its effort on. Managers unlock automation: an engineering manager keeps the top product's queue full on its own, and the Delivery Playbooks research extends that to every product.</p>
+  const perks = deptPerks(state);
+  const syn = activeSynergies(state);
+  const counts = deptCounts(state);
+  return `<p class="muted small">Priorities change what a department spends its effort on. Departments grow into named capabilities as they gain people; the bigger ones need a manager. Managers also unlock automation: an engineering manager keeps the top product's queue full on its own.</p>
+  <div class="tile"><h3>Synergies<span class="tag">${syn.filter((x) => x.active).length}/${syn.length} active</span></h3>
+    ${syn.map((x) => `<div class="spread small"><span style="color:var(--${x.active ? 'good' : 'dim'})">${x.active ? '✔' : '·'} <b>${esc(x.name)}</b> — ${esc(x.desc)}</span><span>${effectRow(x.mods)}</span></div>`).join('')}
+  </div>
   <div class="grid two">${DEPARTMENTS.map((d) => {
     const locked = order < stageOrder(d.unlock);
     const dept = state.departments[d.id];
@@ -446,6 +454,8 @@ export function departments(ctx) {
         <p>${esc(d.blurb)}</p>
         <div class="spread small"><span>Output</span><b>${Object.entries(wf.byDept[d.id]).filter(([, v]) => v > 0.05).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ') || 'none'}</b></div>
         <div class="spread small"><span>Manager</span><b>${mgr ? esc(mgr.name) : 'none'}</b></div>
+        <div class="perks">${perks.filter((p) => p.dept === d.id).map((p) => `<div class="small perk ${p.active ? 'on' : ''}" title="${esc(p.desc)}">
+          ${p.active ? '✔' : `${Math.min(p.have, p.size)}/${p.size}`} <b>${esc(p.name)}</b>${p.manager ? ' <span class="muted">(needs manager)</span>' : ''} ${effectRow(p.mods)}</div>`).join('')}</div>
         <label class="small">Assign manager
           <select data-act="set-manager" data-id="${d.id}">
             <option value="">- none -</option>
@@ -511,7 +521,7 @@ export function finance(ctx) {
     ['Roadmap work', -(st.roadmapDay || 0), 'down'],
     ['Tools & overhead', -(st.miscDay || 0), 'down'],
     ['Loan repayment', -(st.loanDay || 0), 'down']
-  ].filter(([, v]) => v !== 0 || true);
+  ].filter(([l, v]) => l !== 'Loan repayment' || v !== 0);
 
   return `
     <div class="grid two">
@@ -634,14 +644,15 @@ export function office(ctx) {
         ${t.owned ? '' : btn('office', t.available ? `Move in (${money(t.cost)})` : t.reason || 'Unavailable', { id: t.id, disabled: !t.available })}
       </div>`).join('')}</div>
     <hr />
-    <h3>Rooms</h3>
-    <p class="muted small">Rooms are permanent for this run and appear in the office view immediately.</p>
+    <h3>Rooms<span class="tag">${state.office.rooms.length}/${roomSlots(state.office.tier)} slots</span><span class="tag">upkeep ${money(roomUpkeep(state))}/day</span></h3>
+    <p class="muted small">Each office only fits so many rooms, and every room costs upkeep. Rooms appear in the office view immediately, and people use the ones that fit their job. Knocking one down frees its slot; nothing is refunded.</p>
     <div class="grid two">${rooms.map((r) => `
-      <div class="tile" style="${r.owned ? 'opacity:.6' : ''}">
+      <div class="tile" style="${r.owned ? 'border-color:var(--good)' : ''}">
         <h3>${esc(r.name)}<span class="tag">${r.owned ? 'built' : money(r.cost)}</span></h3>
         <p>${esc(r.blurb)}</p>
-        <div class="small muted">${Object.entries(r.effect).map(([k, v]) => `${k} ${typeof v === 'number' && Math.abs(v) < 1 ? (v > 0 ? '+' : '') + Math.round(v * 100) + '%' : '+' + v}`).join(' · ')}</div>
-        ${r.owned ? '' : btn('room', r.available ? 'Build' : r.reason || 'Unavailable', { id: r.id, disabled: !r.available })}
+        <div class="small">${effectRow(Object.fromEntries(Object.entries(r.effect).filter(([k]) => k !== 'capacity')))}${r.effect.capacity ? ` <span class="tag">+${r.effect.capacity} server capacity</span>` : ''}</div>
+        <div class="small muted">Upkeep ${money(r.upkeep || 0)}/day</div>
+        ${r.owned ? btn('room-remove', 'Knock it down', { id: r.id, cls: 'btn secondary' }) : btn('room', r.available ? 'Build' : r.reason || 'Unavailable', { id: r.id, disabled: !r.available })}
       </div>`).join('')}</div>`;
 }
 
