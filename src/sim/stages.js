@@ -10,9 +10,18 @@ export function stageSnapshot(state) {
   };
 }
 
+/** A stage's requirements for this company (a Small Team never needs 45 people). */
+export function stageReq(state, stage) {
+  const req = { ...(stage.req || {}) };
+  if (Array.isArray(state.challenges) && state.challenges.includes('small_team') && req.employees) {
+    req.employees = Math.min(req.employees, 20);
+  }
+  return req;
+}
+
 export function meetsStage(state, stage) {
   const snap = stageSnapshot(state);
-  return Object.entries(stage.req || {}).every(([k, v]) => (snap[k] ?? 0) >= v);
+  return Object.entries(stageReq(state, stage)).every(([k, v]) => (snap[k] ?? 0) >= v);
 }
 
 export function nextStage(state) {
@@ -24,7 +33,7 @@ export function stageProgress(state) {
   const next = nextStage(state);
   if (!next) return null;
   const snap = stageSnapshot(state);
-  const parts = Object.entries(next.req).map(([k, v]) => ({
+  const parts = Object.entries(stageReq(state, next)).map(([k, v]) => ({
     key: k, have: snap[k] ?? 0, need: v, pct: Math.min(1, (snap[k] ?? 0) / v)
   }));
   return { stage: next, parts, pct: parts.reduce((a, b) => a + b.pct, 0) / parts.length };

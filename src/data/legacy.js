@@ -7,8 +7,8 @@
 // once, ever, and several of them unlock backgrounds.
 
 export const BACKGROUNDS = [
-  { id: 'generalist', name: 'Generalist', mods: {},
-    desc: 'Mediocre at everything, which is exactly what a company of one needs. No bonuses, no weaknesses.' },
+  { id: 'generalist', name: 'Generalist', mods: { deptBonus: 0.05 },
+    desc: 'Good enough at everything to help every department a little. No weaknesses.' },
   { id: 'technical', name: 'Technical Founder', mods: { devSpeed: 0.12, debtRate: -0.12, sales: -0.2, marketing: -0.1 },
     desc: 'You can build anything. Selling it is someone else\'s job.' },
   { id: 'seller', name: 'Sales Founder', mods: { sales: 0.3, contractSize: 0.12, marketing: 0.1, devSpeed: -0.1 },
@@ -29,10 +29,10 @@ export const BACKGROUNDS = [
 export const backgroundById = (id) => BACKGROUNDS.find((b) => b.id === id) || BACKGROUNDS[0];
 
 export const CHALLENGES = [
-  { id: 'bootstrap', name: 'Bootstrapped', frMul: 0.4, desc: 'No equity funding rounds. Revenue loans are allowed.' },
+  { id: 'bootstrap', name: 'Bootstrapped', frMul: 0.15, desc: 'No equity funding rounds (revenue loans are allowed). You keep the whole company, which already pays well at exit.' },
   { id: 'lean_office', name: 'Small Office', frMul: 0.25, desc: 'You can never move beyond the Loft.' },
   { id: 'no_marketing', name: 'No Marketing Budget', frMul: 0.3, desc: 'Paid marketing is locked at zero. Word of mouth only.' },
-  { id: 'small_team', name: 'Small Team', frMul: 0.35, desc: 'Never more than 25 people.' },
+  { id: 'small_team', name: 'Small Team', frMul: 0.2, desc: 'Never more than 25 people. Stages stop asking for headcount you cannot have.' },
   { id: 'hard_rivals', name: 'Hypercompetitive', frMul: 0.3, desc: 'Every rival starts much stronger and richer.' },
   { id: 'recession_start', name: 'Recession Start', frMul: 0.2, desc: 'The economy opens in a recession.' },
   { id: 'speedrun', name: 'Speedrun', frMul: 0.5, desc: 'The bonus only pays if you exit before day 220.' }

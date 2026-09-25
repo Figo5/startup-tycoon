@@ -28,7 +28,7 @@ export function launchFactors(state, mods, p, prj, lead) {
   const ap = approachById(prj.approach);
   const f = [];
   f.push(['Product quality', p.quality * 0.42]);
-  if (prj.typeId === 'mvp') f.push(['First-launch goodwill', 0.12]);
+  if (prj.typeId === 'mvp') f.push(['First-launch goodwill', 0.2]);
   if (ap.launch) f.push([`${ap.name} approach`, ap.launch]);
   if (type?.launch) f.push([type.name, type.launch]);
   let traitBonus = 0;
