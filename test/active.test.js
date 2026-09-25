@@ -7,8 +7,9 @@ import { computeWorkforce, setManager, deptMultiplier } from '../src/sim/workfor
 import { startOutage } from '../src/sim/infra.js';
 import { MINIGAMES } from '../src/minigames/index.js';
 
-test('there are three optional activities and each one pays out', () => {
-  assert.equal(Object.keys(MINIGAMES).length, 3);
+test('there are four optional activities and each one pays out', () => {
+  // debugging, incident response, negotiation, and the investor pitch
+  assert.equal(Object.keys(MINIGAMES).length, 4);
 
   const s = game(70);
   launch(s);
@@ -52,4 +53,17 @@ test('a manager measurably multiplies their department', () => {
   const after = computeWorkforce(s, computeMods(s)).byDept.engineering.eng;
   assert.ok(after > before * 1.15, `manager should lift output: ${before} -> ${after}`);
   assert.ok(deptMultiplier(s, computeMods(s), 'engineering') > 1);
+});
+
+test('an investor pitch is built from finite, real company numbers', async () => {
+  const { pitchFacts } = await import('../src/ui/ui.js');
+  const s = game(72);
+  launch(s);
+  run(s, 10);
+  const f = pitchFacts(s, mods(s));
+  for (const [k, v] of Object.entries(f)) {
+    if (typeof v === 'number' && k !== 'runwayDays') assert.ok(Number.isFinite(v), `${k} = ${v}`);
+  }
+  assert.ok(f.rank >= 1 && f.rank <= f.field);
+  assert.ok(f.users > 0);
 });
