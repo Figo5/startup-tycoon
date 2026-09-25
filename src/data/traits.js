@@ -124,6 +124,8 @@ export const paceById = (id) => PACES.find((p) => p.id === id) || PACES[1];
  *  seniority word lose it, so nobody is ever a "Senior Senior Engineer". */
 export function jobTitle(skill, roleName, isFounder = false) {
   if (isFounder) return 'Founder';
+  // Managers climb their own ladder.
+  if (roleName === 'Manager') return skill >= 10 ? 'VP' : skill >= 8 ? 'Director' : skill >= 6 ? 'Senior Manager' : 'Manager';
   const base = String(roleName || '').replace(/^Senior\s+/, '');
   return `${levelName(skill)} ${base}`;
 }

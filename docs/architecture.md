@@ -44,21 +44,28 @@ dependency on Phaser or the DOM** and is fully exercised by `node --test`.
 
 ```
 engine.step(state, days)
-  ├─ modifiers.computeMods(state)     every research/room/boost/prestige/scenario
-  │                                   effect, plus advisors, acquired technology,
-  │                                   goal rewards and the roadmap engineering commit
+  ├─ modifiers.computeMods(state)     research, rooms, boosts, prestige, scenario, advisors,
+  │                                   acquired tech, goal rewards, economy phase, strategic
+  │                                   investor perks, department perks/synergies, founder
+  │                                   background, and the roadmap engineering commit
   ├─ workforce.computeWorkforce       employees -> per-department output + payroll
+  │                                   (traits, energy, pace, leave, streaks)
   ├─ products.distributeEngineering   output -> project progress -> project effects
-  │                                   (output is reduced by the roadmap commitment)
+  ├─ launch.settleCompleted           credit a lead, roll real launches (flop..viral)
   ├─ roadmap.tickRoadmaps             initiative effort -> progress -> one-time effects
   ├─ products.tickProducts            growth, churn, conversion, revenue, decay, reputation
+  │                                   (trends, price wars, network effects, security, billing)
   ├─ infra.tickInfra                  load, capacity, cost, reliability, outage rolls
-  ├─ economy.tickEconomy              cash, burn, runway, valuation
-  ├─ workforce.tickWorkforce          morale, attrition, candidates, auto-hire
-  ├─ research / competitors / events
+  ├─ economy.tickEconomy              cash, burn, room upkeep, loans, interest, valuation
+  ├─ workforce.tickWorkforce          morale, energy, burnout, attrition, candidates
+  ├─ research / competitors           rivals take personality-driven turns, entrants, nemesis
+  ├─ events.tickEvents                scheduled follow-ups, triggers, cadence draw, auto-resolve
+  ├─ market.tickMarket                economy phases and category trends
+  ├─ funding.tickFunding              board targets, loan completion
   ├─ acquisitions.refreshAcquisitionTargets
   ├─ goals.tickGoals                  sustained counters + one-time completion
-  └─ stages.checkStageUp
+  ├─ stages.checkStageUp
+  └─ legacy.tickAchievements          in-play achievements, each paid once, ever
 ```
 
 `step` returns immediately, and `runOffline` returns `null`, once `state.exitResult`
@@ -89,6 +96,9 @@ had already happened**. The fix is structural, not a clamp on the result.
 | Purchases carry a transaction id kept in the save | `meta.appliedTx` | a replayed click, a reload or an imported save cannot buy a level twice |
 | A 450 ms guard refuses repeat triggers of one control | `ui/ui.js` | a double click is one interaction |
 | Advisors, acquisitions, roadmap completions and goal rewards are marked before their effects land | `sim/advisors.js`, `sim/acquisitions.js`, `sim/roadmap.js`, `sim/goals.js` | each effect can only be applied once, ever |
+| An achievement id is recorded in the meta before its reputation is paid | `sim/legacy.js` | an achievement pays once across every company, reload and import |
+| A board target moves from `open` to `hit` or `missed` exactly once | `sim/funding.js` | a target cannot reward or punish twice |
+| Records and the hall of fame are written inside the exit transaction | `sim/prestige.js` | a replayed exit cannot add a second record |
 
 `npm run balance` ends with a repeat-claim scan that asserts each of these, and
 `test/exploits.test.js` covers them as unit tests.
@@ -97,19 +107,22 @@ had already happened**. The fix is structural, not a clamp on the result.
 
 | System | Data | Notes |
 |---|---|---|
-| Products | `data/products.js` | 6 categories with genuinely different shapes, 10 project types |
+| Products | `data/products.js` | 10 categories, 11 project types, 3 build approaches, launch outcomes |
+| Launches | `sim/launch.js` | only real launches roll; bonuses beyond quality have diminishing returns |
 | Roadmaps | `data/roadmaps.js` | 16 initiatives in 4 directions; one per product at a time |
-| People | `data/roles.js` | 10 roles, 6 departments, 8 specialties, per-output contribution |
+| People | `data/roles.js`, `data/traits.js` | 10 roles, 6 departments, 8 specialties, 20 traits in 3 rarities, 5 titles, 3 work paces |
+| Organisation | `data/org.js` | 19 department perks, 5 synergies, 7 founder actions |
 | Advisors | `data/advisors.js` | 11 archetypes, fee + revenue-scaled retainer, 1/2/3 slots |
 | Acquisitions | `data/acquisitions.js` | 8 targets, 3 offered at a time from Scale-Up |
 | Goals | `data/goals.js` | 8 goals, 3 offered, 1 active, no expiry |
 | Stages | `data/stages.js` | 7 stages; each widens every market and unlocks mechanics |
-| Research | `data/research.js` | 35 items across 10 branches; several unlock mechanics, not numbers |
-| Office | `data/office.js` | 6 tiers, 8 buyable rooms; both redraw the map |
-| Funding | `data/funding.js` | 6 rounds priced off revenue multiples, 3 exit types |
-| Events | `data/events.js` | 50 events, each with a category and a conservative auto-resolution |
-| Competitors | `data/competitors.js` | 7 rivals with per-market share |
-| Prestige | `data/prestige.js` | 14 permanent tracks, 4 market scenarios |
+| Research | `data/research.js` | 50 items in 12 branches, including 4 exclusive doctrine pairs |
+| Office | `data/office.js` | 6 tiers, 13 rooms with upkeep and per-tier room slots |
+| Market | `data/market.js` | 4 economy phases, 14 category trends |
+| Funding | `data/funding.js` | 6 rounds x up to 4 investors, board targets, revenue loans, 6 exits |
+| Events | `data/events.js`, `data/events_depth.js` | 99 events, 10 triggers, follow-up chains; every one has a conservative auto-resolution |
+| Competitors | `data/competitors.js` | 9 rivals, 7 personalities, generated entrants |
+| Prestige | `data/prestige.js`, `data/legacy.js` | 18 tracks, 4 market scenarios, 9 backgrounds, 7 challenges, 36 achievements |
 
 Balance numbers live only in `data/`. Nothing in the UI or renderer hardcodes a price.
 
@@ -138,12 +151,21 @@ The cooldown is floored at zero, so a full inbox can never bank a backlog of
 spawns to release all at once, and an event whose every option the company cannot
 afford lapses instead of holding a slot forever.
 
-Measured with `npm run cadence` (3 seeds × 3 profiles): **8.4 event opportunities
-per real hour** against a flat 6.0 before (+40%), and 0.28 per game day against
-0.20. Per stage, against the old flat 6.0/h: Solo Founder 5.9 (−5%, quieter for a
-learner), Tiny 6.0, Seed 7.0, Growing 8.3, Scale-Up 8.9, Major 10.4, Late 8.8.
-`test/event-cadence.test.js` asserts the bounds, the dampers and that the pool
-stays reachable.
+On top of the random draw, two other sources add decisions without touching the
+cadence: **follow-ups** (a choice schedules a named event days later, e.g. an
+exhausted engineer who was pushed through a launch resigns) and **triggers** (a
+viral launch, a flop, a rival's poaching move, lawsuit, layoffs or copied launch,
+an economy shift or a new trend in a market you are not in). Chain-only and
+trigger events are never drawn at random, each trigger has its own cooldown, and
+both respect the inbox ceiling.
+
+Measured with `npm run cadence` after the depth pass (3 seeds × 3 profiles):
+**11.8 decisions per real hour** (was 8.4), 0.40 per game day. Per stage: Solo
+Founder 6.8, Tiny 8.5, Seed 9.7, Growing 11.8, Scale-Up 12.9, Major 13.7, Late 16.4.
+The mix is people 268 · market 234 · money 121 · product 113 · infra 61 · legal 58 ·
+customers 48 over nine runs. `test/event-cadence.test.js` asserts the bounds, the
+dampers and that the pool stays reachable; `test/depth-events.test.js` resolves
+every choice of every event on a rich and a bare company.
 
 ## Feature power budgeting
 
@@ -178,19 +200,22 @@ After that, measured first-exit time with each system played eagerly:
 
 ## Progression and pacing
 
-Stages gate on headcount, revenue and valuation together. Measured with a scripted
-operator over three seeds (`npm run balance`):
+Stages gate on headcount, revenue and valuation together. Measured with the scripted
+operator over three seeds (`npm run balance`, 2026-09-25, after the depth pass; the
+active profile now also uses founder actions):
 
-| Player | First hire | Seed stage | Scale-Up | First exit |
-|---|---|---|---|---|
-| Idle (checks ~30 min) | ~1.0 h | ~2.0–2.5 h | ~6–7.5 h | ~11–12.5 h |
-| Moderate (~12 min) | ~0.4–0.8 h | ~1.2–1.4 h | ~2.6–3.2 h | ~5.0–5.4 h |
-| Active (~5 min + minigames) | ~0.1 h | ~0.8 h | ~1.8–1.9 h | ~3.2–3.5 h |
+| Player | First hire | Seed stage | Scale-Up | Major | First exit |
+|---|---|---|---|---|---|
+| Idle (checks ~30 min) | ~0.5 h | ~2.0 h | ~6.5 h | ~9–10.5 h | ~13.5–16 h |
+| Moderate (~12 min) | ~0.4–0.8 h | ~1.2–1.4 h | ~2.8–3.0 h | ~4.6–5.0 h | ~6.2–7.0 h |
+| Active (~5 min, minigames, founder actions) | ~0.1 h | ~0.8 h | ~2.0–2.1 h | ~2.6–3.1 h | ~3.6–4.1 h |
 
-A first exit now pays 10–13 Founder Reputation (measured), against prestige tracks
-costing 2–12 for their first level — enough for two or three meaningful picks, not
-the whole board. `npm run balance` also simulates a second run with the first run's
-reputation spent, and prints the upgrade levels that bought.
+That is roughly 15–25% longer than before the pass, from added depth rather than
+raised prices. A first exit pays 9–17 Founder Reputation from the exit itself plus
+around 15 from one-time achievements, and a second run is not simply faster: in
+the measured runs it took as long as the first, because the difference now comes
+from backgrounds, starting products, challenges and the co-founder rather than
+multipliers alone. See [balance](balance.md) for strategy comparisons.
 
 ## Starting over
 
@@ -213,8 +238,14 @@ short delay so a stray double click cannot fire it.
 
 ## Save strategy
 
-`src/sim/save.js` owns everything persistent. `SAVE_VERSION` is 4.
+`src/sim/save.js` owns everything persistent. `SAVE_VERSION` is 5.
 
+- v4 → v5 (the depth pass) is additive too: employees and candidates get empty
+  trait lists, full energy and an empty story; products get the Standard approach
+  and no launch history; the market, rival personalities and valuations, missing
+  rivals, funding targets/perks/loans, founder actions and legacy records are
+  initialised. No trait, achievement or reputation is granted retroactively, and a
+  genuine v4 save from the previous release loads and keeps playing (browser-tested).
 - Versioned schema with a `MIGRATIONS` chain applied on load. v3 → v4 is additive:
   the new containers (`roadmap` per product, `advisors`, `goals`, `acquisitions`,
   `exitResult`, `company.ownership`, the event category history, `meta.appliedTx`)

@@ -6,26 +6,43 @@ A long-form idle startup-management game with a live pixel-art office and persis
 
 ![An expanded pixel-art office with employees, meeting rooms and company activity](docs/media/office.png)
 
-*Expanded office captured during a scripted playtest. A new company starts in a garage.*
+*A Scale-Up office during a pep talk, captured in a scripted playtest: people gather around the founder, the HUD shows work in flight and market trends, and a side-project event waits in the inbox. A new company starts in a garage.*
 
 ## Build a company, then a career
 
-Start as a solo founder, ship products, hire a team and grow toward an acquisition
-or IPO. Each exit banks Founder Reputation for permanent upgrades and harder
-market scenarios. A first company is designed to unfold over hours of play.
+Start as a solo founder, ship products, hire a team and grow toward an exit —
+then found another company with a different product, background and set of rules.
+Each exit banks Founder Reputation for permanent upgrades, and finishing companies
+opens up new starting products, founder backgrounds, markets and challenges.
+A first company is designed to unfold over a working day of play.
 
 - **Active and idle play:** manage in short check-ins, leave up to 16 hours of
-  offline progress, or play optional puzzles for a bonus.
-- **A living office:** employees walk between desks, rooms and huddles as the
-  business grows through six office tiers. Movement is visual; the simulation
-  keeps working independently.
-- **Products and people:** plan development, balance technical debt and reliability,
-  hire across departments, research automation, and manage funding and ownership.
-- **Long-term decisions:** product roadmaps, retained advisors, acquisitions and
-  company goals give later stages distinct choices. Events vary with company stage.
-- **Persistent progression:** versioned saves, import/export and transactional
-  exits/upgrades. **Start a new company** preserves the founder; **Reset all progress**
-  explicitly clears both the company and founder progression after confirmation.
+  offline progress, use founder actions (keys Z–M) for short boosts, or play
+  optional puzzles, including an investor pitch built from your real numbers.
+- **A living office:** people work from the rooms that fit their job, huddle for
+  standups, rush to the server room in an outage, celebrate hit launches, go home
+  on leave and show what they are doing in pixel emote bubbles. Monitors light up
+  where someone is working, and a crunch dims the lights.
+- **People with stories:** employees roll readable traits (common, rare and
+  legendary), get tired under a crunch, burn out, level up through job titles and
+  keep a short personal history. The best of them can follow you to your next company.
+- **Ten company shapes:** consumer apps, SaaS, developer tools, B2B, AI, enterprise,
+  a consulting agency (cash now, valued low), a hit-driven game studio, a social
+  network with network effects and a security-critical fintech app.
+- **Launches, not just progress bars:** real launches roll as flops, hits or viral
+  moments from quality, polish, the team's traits, marketing and the market.
+- **A market that moves:** booms, downturns and recessions, category trends to ride
+  or avoid, and nine rivals with personalities who launch, raise, start price wars,
+  poach your people, sue, merge and fail — plus new entrants and a nemesis.
+- **Strategic money:** each funding round offers different term sheets (a small
+  round, a top-tier VC with a board target, a strategic investor), revenue-based
+  loans for bootstrappers, and six exits from an acqui-hire to an IPO or a merger.
+- **Organisation:** departments grow into named perks, the right mix unlocks
+  synergies, research includes mutually exclusive company doctrines, and every
+  office tier fits a limited number of rooms with upkeep.
+- **Persistent progression:** 36 achievements, records, a hall of fame, 18 founder
+  upgrade tracks, 9 founder backgrounds and 7 optional challenges. Versioned saves
+  migrate older saves, import/export works, and exits and upgrades are transactional.
 
 ## Run locally
 
@@ -48,11 +65,12 @@ Use export/import to move progress between browsers.
 JavaScript and Vite, with **Phaser for the office** and a **DOM management UI**.
 `src/sim/` contains the simulation without Phaser or DOM dependencies;
 `src/data/` contains content and tuning. The renderer reads state without deciding
-cash, ownership or progression. Shared transaction paths prevent repeated exits
-and purchases from awarding value twice.
+cash, ownership or progression. Shared transaction paths prevent repeated exits,
+purchases and achievements from awarding value twice.
 
 See [architecture and save invariants](docs/architecture.md),
-[gameplay and controls](docs/gameplay.md), and [balance methodology](docs/balance.md).
+[gameplay and controls](docs/gameplay.md), [balance methodology](docs/balance.md) and
+the [depth pass report](docs/development/depth-pass-report.md).
 
 ## Testing
 
@@ -62,17 +80,16 @@ npm run build
 npm run probe        # optional system-integration probe
 ```
 
-Verified on 2026-09-22: **156 tests passed** and the production build passed
-(Node.js 26.8.1). Tests cover simulation, transactions, roadmaps, advisors,
-acquisitions, goals, events, migrations and full reset. The build reports a large
-Phaser bundle warning. The Chromium full-reset check also passed, including
-confirmation, reload persistence and a second reset. Historical browser and balance evidence is in
-[docs/development](docs/development/README.md).
+Verified on 2026-09-25: **176 tests passed** (Node.js 22). In that environment the npm
+registry was unreachable, so the production bundle was checked with Bun's bundler
+against Phaser 3.90 rather than with `vite build`; see the
+[depth pass report](docs/development/depth-pass-report.md) for the browser QA,
+save-migration and balance evidence.
 
 ## Status and limits
 
 A complete, playable single-player game. Desktop/laptop is the intended experience;
-mobile is cramped. There is no audio, cloud save or multiplayer. Only one active
+phones get a compact layout that works for check-ins. There is no audio, cloud save or multiplayer. Only one active
 save tab is recommended: a second tab is warned, not blocked. Balance measurements
 come from scripted policies, with later-run pacing still less well validated.
 

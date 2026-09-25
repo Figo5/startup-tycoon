@@ -23,6 +23,7 @@ import { advisorOffers, hireAdvisor } from '../src/sim/advisors.js';
 import { acquisitionOffers, acquireCompany } from '../src/sim/acquisitions.js';
 import { offeredGoals, acceptGoal } from '../src/sim/goals.js';
 import { money, abbrev } from '../src/sim/util.js';
+import { founderActionStatus, useFounderAction } from '../src/sim/org.js';
 
 export const DAYS_PER_REAL_HOUR = 3600 / REAL_SECONDS_PER_DAY;   // 30
 
@@ -52,6 +53,11 @@ export function operate(state, profile, marks) {
     } else if (choice) {
       resolveEvent(state, mods, p.id, choice.id, null);
     }
+  }
+
+  // 1b. An active player uses founder actions whenever they are ready.
+  if (profile.minigames) {
+    for (const a of founderActionStatus(state)) if (a.available) useFounderAction(state, a.id, null);
   }
 
   // 2. Keep engineering busy
