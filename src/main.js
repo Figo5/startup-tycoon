@@ -29,10 +29,11 @@ const app = {
     if (kind === 'goal') app.celebrate(text);
   },
   refresh() { app.mods = computeMods(app.state); app.ui?.render(); },
-  celebrate(text) {
+  /** A visible moment for something the player waited on. The feed line was
+   *  already written by log(); writing it again here doubled every goal. */
+  celebrate() {
     const scene = app.game?.scene?.getScene('office');
     scene?.celebrate?.();
-    app.notify(text, 'goal');
   },
   togglePause() {
     if (app.state.exitResult) { app.notify('This run has already ended.', 'bad'); return; }
@@ -303,9 +304,16 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
+function fmtRealTime(sec) {
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${String(m % 60).padStart(2, '0')}m`;
+}
+
 function showOfflineSummary(s) {
   const rows = [
-    ['Time away', fmtDuration(s.gameDays) + (s.capped ? ` (capped at ${OFFLINE_CAP_HOURS}h)` : '')],
+    ['Time away', `${fmtRealTime(s.realSeconds)} · ${Math.round(s.gameDays)} game days` + (s.capped ? ` (capped at ${OFFLINE_CAP_HOURS}h)` : '')],
     ['Revenue', money(s.revenue)],
     ['Expenses', money(s.expenses)],
     ['Net cash', money(s.cash)],
