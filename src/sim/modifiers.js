@@ -8,6 +8,7 @@ import { acquisitionTech } from './acquisitions.js';
 import { goalTech } from './goals.js';
 import { initiativeCommit } from './roadmap.js';
 import { marketMods } from './market.js';
+import { fundingPerks } from './funding.js';
 
 const FLAT_KEYS = new Set(['capacity', 'deskBonus', 'candidateSlots']);
 const START_KEYS = new Set(['startCash', 'founderSkill', 'startReputation', 'startEngineers',
@@ -41,6 +42,7 @@ export function computeMods(state) {
   merge(goalTech(state));
   // The economy phase (boom, downturn...) applies to everyone equally.
   merge(marketMods(state));
+  merge(fundingPerks(state));
   // How much engineering an active roadmap initiative takes out of the product
   // queue. Read by products.distributeEngineering.
   m.initiativeCommit = initiativeCommit(state);

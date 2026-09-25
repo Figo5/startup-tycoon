@@ -6,7 +6,7 @@ import { eventText, choiceCost, resolveEvent, visibleChoices, labelFor } from '.
 import { hire, fire, promote, reassign, setManager, sendOnLeave, setPace, giveRaise } from '../sim/workforce.js';
 import { queueProject, createProduct, setApproach, sellProduct, productSalePrice } from '../sim/products.js';
 import { startResearch, cancelResearch } from '../sim/research.js';
-import { raise } from '../sim/funding.js';
+import { raise, takeLoan } from '../sim/funding.js';
 import { upgradeOffice, buyRoom } from '../sim/office.js';
 import { acquire } from '../sim/competitors.js';
 import { setCapacity, computeLoad } from '../sim/infra.js';
@@ -28,7 +28,7 @@ export const PANEL_ORDER = ['company', 'products', 'employees', 'departments', '
 // A purchase is refused if the same control is triggered again inside this
 // window. A double click is one interaction; it must buy one level.
 const REPEAT_GUARD_MS = 450;
-const PURCHASE_ACTIONS = new Set(['sell-product', 'buy-prestige', 'room', 'office', 'new-product', 'research',
+const PURCHASE_ACTIONS = new Set(['loan', 'sell-product', 'buy-prestige', 'room', 'office', 'new-product', 'research',
   'raise', 'acquire', 'acquire-company', 'advisor-hire', 'roadmap-start', 'hire']);
 
 export function createUI(app) {
@@ -241,7 +241,8 @@ export function createUI(app) {
         else setCapacity(s, s.infra.capacity + Number(id));
         done(null); break;
       }
-      case 'raise': done(raise(s, mods, id), 'Round closed.'); break;
+      case 'raise': { const [rid, inv] = id.split('|'); const r = raise(s, mods, rid, inv || 'lead'); done(r, r.ok ? `Round closed: ${money(r.offer.cash)} from ${r.offer.name}.` : null); break; }
+      case 'loan': { const r = takeLoan(s); done(r, r.ok ? `Borrowed ${money(r.principal)}.` : null); break; }
       case 'office': done(upgradeOffice(s), 'New office. Everyone is moving desks.'); break;
       case 'room': done(buyRoom(s, id), 'Built.'); break;
       case 'acquire': done(acquire(s, mods, id), 'Acquisition complete.'); break;

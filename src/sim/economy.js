@@ -6,6 +6,7 @@ import { fire } from './workforce.js';
 import { acquiredRevenue } from './acquisitions.js';
 import { advisorRetainerDay } from './advisors.js';
 import { roadmapRunDay } from './roadmap.js';
+import { loanRepayment } from './funding.js';
 
 export const MISC_COST_PER_EMPLOYEE_DAY = 6;
 
@@ -56,7 +57,7 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   const penalties = slaPenalty(state, 1);
 
   const revDay = revenue + contracts + acquired - penalties;
-  const expDay = wf.payrollDay + infraCost + marketing + rent + misc + advisors + roadmap;
+  let expDay = wf.payrollDay + infraCost + marketing + rent + misc + advisors + roadmap;
 
   st.revenueDay = revDay;
   st.payrollDay = wf.payrollDay;
@@ -67,6 +68,11 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   st.acquiredDay = acquired;
   st.advisorDay = advisors;
   st.roadmapDay = roadmap;
+  st.expenseDay = expDay;
+  // Loans are repaid as a slice of revenue: they cost more when you grow.
+  const loanPaid = loanRepayment(state, revDay, days);
+  st.loanDay = days > 0 ? loanPaid / days : 0;
+  expDay += st.loanDay;
   st.expenseDay = expDay;
   st.netDay = revDay - expDay;
   st.users = sum(liveProducts(state), (p) => p.users);

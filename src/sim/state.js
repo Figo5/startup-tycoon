@@ -295,7 +295,7 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     departments,
     infra: { capacity: 12, load: 0, reliability: 0.9, autoscale: false, spendDay: 0, outageTimer: 0 },
     research: { completed: (fx.startResearch || []).slice(), active: [], points: 0 },
-    funding: { rounds: [], offers: [], exitOffers: [] },
+    funding: { rounds: [], offers: [], exitOffers: [], targets: [], perks: [], exitMods: {}, loans: [] },
     contracts: [],
     competitors: COMPETITORS.map((c) => makeRival(c, scenario.mods || {})),
     rivalState: { nemesis: null, wars: [], passed: [] },

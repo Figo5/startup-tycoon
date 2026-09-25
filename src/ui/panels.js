@@ -14,7 +14,7 @@ import {
 import { stageProgress } from '../sim/stages.js';
 import { computeWorkforce, deskPressure, marketSalary, prioritySplit, hireCost } from '../sim/workforce.js';
 import { researchStatus, researchSlots } from '../sim/research.js';
-import { fundingOffers } from '../sim/funding.js';
+import { fundingOffers, loanOffer } from '../sim/funding.js';
 import { exitPreview, prestigeLevels } from '../sim/prestige.js';
 import { officeOptions, roomOptions } from '../sim/office.js';
 import { acquisitionTargets, marketShares, leaderboard } from '../sim/competitors.js';
@@ -509,8 +509,9 @@ export function finance(ctx) {
     ['Rent', -st.rentDay, 'down'],
     ['Advisors', -(st.advisorDay || 0), 'down'],
     ['Roadmap work', -(st.roadmapDay || 0), 'down'],
-    ['Tools & overhead', -(st.miscDay || 0), 'down']
-  ];
+    ['Tools & overhead', -(st.miscDay || 0), 'down'],
+    ['Loan repayment', -(st.loanDay || 0), 'down']
+  ].filter(([, v]) => v !== 0 || true);
 
   return `
     <div class="grid two">
@@ -556,17 +557,49 @@ export function finance(ctx) {
     <hr />
     <h3>Funding</h3>
     <p class="muted small">You own ${pct(state.company.founderEquity, 1)}. Every round dilutes that, and your exit pays out on what is left. Bootstrapping all the way is a real strategy.</p>
-    <div class="grid two">${offers.map((o) => `
-      <div class="tile">
-        <h3>${esc(o.name)}<span class="tag">${pct(o.equity)} equity</span></h3>
+    ${fundingStatus(state)}
+    <div class="grid two">${offers.map((o) => {
+      const taken = state.funding.rounds.find((r) => r.id === o.id);
+      return `
+      <div class="tile" style="${taken && !o.available ? 'opacity:.6' : ''}">
+        <h3>${esc(o.name)}<span class="tag">${taken && !o.available ? `raised ${money(taken.cash)}` : `${pct(o.equity)} equity`}</span></h3>
         <p>${esc(o.blurb)}</p>
-        <div class="spread small"><span>Investor valuation</span><b>${money(o.valuation)}</b></div>
-        <div class="spread small"><span>You receive</span><b>${money(o.cash)}</b></div>
-        ${btn('raise', o.available ? `Raise ${o.name}` : o.reason || 'Unavailable', { id: o.id, disabled: !o.available })}
-      </div>`).join('')}</div>
+        ${o.available ? o.terms.map((t) => `
+          <button class="choice" data-act="raise" data-id="${o.id}|${t.investor}">
+            <b>${esc(t.name)}: ${money(t.cash)} for ${pct(t.equity, 1)}</b>
+            <span class="small">valuation ${money(t.valuation)} · ${esc(t.blurb)}</span>
+            ${t.target ? `<span class="small" style="color:var(--warn);display:block">Board target: revenue ${money(Math.max(state.stats.revenueDay, 50) * t.target.revenueMul)}/day within ${t.target.days} days, or the board forces cuts.</span>` : ''}
+            ${t.perk ? `<span class="small" style="display:block">${effectRow(t.perk)} ${Object.entries(t.exitMod || {}).map(([k, v]) => `<span class="tag">${k} exit ${v > 0 ? '+' : ''}${Math.round(v * 100)}%</span>`).join(' ')}</span>` : ''}
+          </button>`).join('') : `<div class="spread small"><span>Investor valuation</span><b>${money(o.valuation)}</b></div>
+          ${taken ? '' : `<p class="small muted">${esc(o.reason || 'Unavailable')}</p>`}`}
+      </div>`;
+    }).join('')}</div>
     <hr />
     <h3>History</h3>
     ${sparkline(state.stats.history)}`;
+}
+
+function fundingStatus(state) {
+  const f = state.funding;
+  const loan = loanOffer(state);
+  const targets = (f.targets || []).filter((t) => t.status === 'open');
+  const done = (f.targets || []).filter((t) => t.status !== 'open');
+  const active = (f.loans || [])[0];
+  return `<div class="grid two">
+    <div class="tile"><h3>Board</h3>
+      ${targets.length ? targets.map((t) => `<div class="spread small"><span>Revenue target (${esc(t.round.replace(/_/g, ' '))})</span><b>${money(state.stats.revenueDay)} / ${money(t.goal)}</b></div>
+        ${bar(Math.min(1, (state.stats.revenueDay - t.from) / Math.max(1, t.goal - t.from)), 'warn')}
+        <div class="small muted">${fmtDuration(Math.max(0, t.deadline - state.time.day))} left before the board acts.</div>`).join('')
+        : '<p class="small muted">No growth targets. A top-tier VC round comes with one.</p>'}
+      ${done.length ? `<p class="small">${done.map((t) => `<span class="tag" style="color:var(--${t.status === 'hit' ? 'good' : 'bad'})">${esc(t.round.replace(/_/g, ' '))} target ${t.status}</span>`).join(' ')}</p>` : ''}
+      ${Object.keys(f.exitMods || {}).length ? `<p class="small">Exit terms: ${Object.entries(f.exitMods).map(([k, v]) => `${esc(k)} ${v > 0 ? '+' : ''}${Math.round(v * 100)}%`).join(' · ')}</p>` : ''}
+    </div>
+    <div class="tile"><h3>Revenue-based loan</h3>
+      <p class="small muted">Cash now, repaid as ${Math.round(loan.share * 100)}% of revenue until ${Math.round((loan.repay / Math.max(1, loan.principal)) * 100)}% is paid back. No equity, no board.</p>
+      ${active ? `<div class="spread small"><span>Still owed</span><b>${money(active.owed)}</b></div>${bar(1 - active.owed / Math.max(1, active.principal * 1.35), 'good', 'loan repaid')}`
+        : btn('loan', loan.available ? `Borrow ${money(loan.principal)} (repay ${money(loan.repay)})` : loan.reason, { disabled: !loan.available })}
+    </div>
+  </div>`;
 }
 
 function sparkline(history) {
