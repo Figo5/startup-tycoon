@@ -9,7 +9,7 @@ import { OFFICE_TIERS, ROOMS } from '../data/office.js';
 import { PRESTIGE_UPGRADES } from '../data/prestige.js';
 import {
   liveProducts, totalCustomers, marketCap, projectAvailable, suggestProject, maxProducts,
-  availableCategories, productCost, classMix, productSalePrice
+  availableCategories, productCost, classMix, productSalePrice, featuresForMajor
 } from '../sim/products.js';
 import { stageProgress } from '../sim/stages.js';
 import { computeWorkforce, deskPressure, marketSalary, prioritySplit, hireCost } from '../sim/workforce.js';
@@ -263,6 +263,8 @@ export function products(ctx) {
           ${bar(p.users / Math.max(cap, 1), 'good', 'market penetration')}
           <div class="spread small"><span>Paying customers</span><b>${abbrev(cust)}</b></div>
           <div class="spread small"><span>Revenue</span><b>${money(p.revenueDay)}/day</b></div>
+          ${cat.billable ? `<div class="spread small"><span>Delivery capacity</span><b>${money(p.deliveryCap || 0)}/day</b></div>
+          <div class="small muted">${(p.deliveryCap || 0) <= p.revenueDay + 1 ? 'Every hour is billed: more engineers, product or support people means more revenue.' : 'Capacity to spare: sales and reputation bring in more clients.'}</div>` : ''}
           <div class="spread small"><span>Churn</span><b>${(p.churnDay * 100).toFixed(2)}%/day</b></div>
           <div class="spread small"><span>Net growth</span><b class="${p.growthDay >= 0 ? 'up' : 'down'}">${p.growthDay >= 0 ? '+' : ''}${abbrev(p.growthDay)}/day</b></div>
           <div class="small muted">Mix: ${CUSTOMER_CLASSES.filter((k) => mix[k] > 0.01).map((k) => `${k} ${Math.round(mix[k] * 100)}%`).join(' · ')}</div>`}
@@ -281,7 +283,7 @@ export function products(ctx) {
           <span class="row">${APPROACHES.map((a) => `<button class="ghost" data-act="approach" data-id="${p.id}|${a.id}" title="${esc(a.desc)}"${p.approach === a.id ? ' aria-current="true" style="color:var(--accent);border-color:var(--accent)"' : ''}>${a.name}</button>`).join('')}</span></div>
         <div class="small muted">${esc(approachById(p.approach).desc)}</div>
         ${(p.launches || []).length ? `<div class="small" style="margin-top:6px">Launches: ${p.launches.slice(0, 4).map((l) => `<span class="tag launch-${l.outcome}" title="${esc(l.name)} · day ${l.day}${l.lead ? ` · led by ${esc(l.lead)}` : ''}">${esc(l.outcome)}</span>`).join('')}</div>` : ''}
-        ${p.stage === 'live' ? `<div class="small muted">Next major version: ${Math.min(4, p.featuresSinceMajor || 0)}/4 feature updates</div>` : ''}
+        ${p.stage === 'live' ? `<div class="small muted">Next major version (v${Math.floor(p.version) + 1}): ${Math.min(featuresForMajor(p), p.featuresSinceMajor || 0)}/${featuresForMajor(p)} feature updates</div>` : ''}
         ${roadmapBlock(ctx, p, wf)}
         <h3 style="margin-top:10px">Work queue</h3>
         ${cur ? `<div class="spread small"><span>${esc(cur.name)}${cur.approach && cur.approach !== 'standard' ? ` <span class="tag">${esc(approachById(cur.approach).name)}</span>` : ''}</span><span>${Math.round((cur.done / cur.work) * 100)}%</span></div>${bar(cur.done / cur.work)}` : '<p class="muted small">Idle. Queue something below, or hire an engineering manager to keep it busy.</p>'}
@@ -303,6 +305,7 @@ export function products(ctx) {
       <div class="tile">
         <h3>${esc(c.name)}<span class="tag">${money(c.cost)}</span></h3>
         <p>${esc(c.blurb)}</p>
+        ${c.strategy ? `<p class="small" style="color:var(--info)">${esc(c.strategy)}</p>` : ''}
         <div class="small muted">Market ${abbrev(c.marketBase)} · churn ${(c.churn * 100).toFixed(1)}%/day · infra ${c.infraLoad}/1k users · enterprise ${pct(c.enterprisePotential)}</div>
         ${btn('new-product', c.available ? `Start ${c.name}` : c.reason || 'Unavailable', { id: c.id, disabled: !c.available })}
       </div>`).join('')}</div><hr />` : `<p class="muted small">Product slots full (${state.products.length}/${slots}). Reaching the next company stage opens another.</p><hr />`;

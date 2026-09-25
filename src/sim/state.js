@@ -244,7 +244,7 @@ export function makeProject(product, type) {
   };
 }
 
-export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Untitled Inc.' } = {}) {
+export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Untitled Inc.', startCategory = 'mobile' } = {}) {
   const m = normalizeMeta(meta || emptyMeta());
   const fx = metaEffects(m);
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
@@ -265,7 +265,8 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
   const departments = {};
   for (const d of DEPARTMENTS) departments[d.id] = { id: d.id, priority: 'balanced', managerId: null };
 
-  const product = makeProduct(rng, 'mobile');
+  const startCat = PRODUCT_CATEGORIES.some((c) => c.id === startCategory) ? startCategory : 'mobile';
+  const product = makeProduct(rng, startCat);
   product.projects.push(makeProject(product, { id: 'mvp', name: 'Build MVP', workMul: 1.0 }));
 
   const state = {

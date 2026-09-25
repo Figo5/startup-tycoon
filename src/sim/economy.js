@@ -1,5 +1,6 @@
 import { clamp, sum, uid } from './util.js';
 import { tierById } from '../data/office.js';
+import { categoryById } from '../data/products.js';
 import { mul, flat } from './modifiers.js';
 import { liveProducts, totalCustomers } from './products.js';
 import { fire } from './workforce.js';
@@ -37,7 +38,11 @@ export function slaPenalty(state, days) {
 }
 
 export function valuation(state, mods) {
-  const annual = state.stats.revenueDay * 365;
+  // Revenue is not all valued alike: a consulting business earns a third of the
+  // multiple a product company does.
+  let discount = 0;
+  for (const p of liveProducts(state)) discount += p.revenueDay * (1 - (categoryById(p.category)?.valuationMul ?? 1));
+  const annual = Math.max(0, state.stats.revenueDay - discount) * 365;
   const growth = clamp(state.stats.growthRate ?? 0, -0.5, 1.5);
   const qualityFactor = 1 + (state.products.length ? Math.max(...state.products.map((p) => p.quality)) : 0) * 0.35;
   const multiple = 7 * mods.stageValuationMul * qualityFactor * (1 + growth * 0.8) * mul(mods, 'valuation');

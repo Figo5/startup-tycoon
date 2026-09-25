@@ -224,7 +224,7 @@ export function operate(state, profile, marks) {
 
 export function run(seed, profileName, horizonDays, opts = {}) {
   const profile = { ...PROFILES[profileName], ...opts };
-  const state = newGame({ seed, meta: opts.meta || emptyMeta(), scenarioId: opts.scenarioId || 'standard' });
+  const state = newGame({ seed, meta: opts.meta || emptyMeta(), scenarioId: opts.scenarioId || 'standard', startCategory: opts.startCategory || 'mobile' });
   const marks = { stages: {} };
   const checkpoints = opts.checkpoints || [];
   const results = [];

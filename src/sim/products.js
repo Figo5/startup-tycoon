@@ -114,7 +114,12 @@ export function applyProjectEffects(state, mods, p, prj) {
   if (e.reliability) p.reliability = clamp(p.reliability + e.reliability, 0, 1);
   if (e.debt) p.techDebt = clamp(p.techDebt + e.debt * debtMul, 0, 3);
   if (e.version) p.version = Math.round((p.version + e.version) * 10) / 10;
-  if (e.market) p.marketBonus += e.market * gainMul;
+  // Repeatable work widens the market with diminishing returns: the hundredth
+  // feature does not open a new market the way the first one did.
+  if (e.market) {
+    const diminish = type.repeatable ? Math.max(0, 1 - p.marketBonus / 1.5) : 1;
+    p.marketBonus += e.market * gainMul * diminish;
+  }
   if (e.infraEff) p.infraEff = clamp(p.infraEff + e.infraEff, -0.6, 0.8);
   if (e.enterpriseReady) p.enterpriseReady = clamp(p.enterpriseReady + e.enterpriseReady, 0, 1);
   if (e.security) p.security = clamp(p.security + e.security, 0, 1);
@@ -130,9 +135,12 @@ export function projectAvailable(state, mods, p, type) {
   const req = type.requires;
   if (req?.stage && stageOrder(state.company.stage) < stageOrder(req.stage)) return false;
   if (req?.research && !state.research.completed.includes(req.research)) return false;
-  if (req?.featuresSinceMajor && (p.featuresSinceMajor || 0) < req.featuresSinceMajor) return false;
+  if (req?.featuresSinceMajor && (p.featuresSinceMajor || 0) < featuresForMajor(p)) return false;
   return true;
 }
+
+/** Each major version needs more feature work behind it than the last. */
+export const featuresForMajor = (p) => 4 + 2 * Math.max(0, Math.floor(p.version || 1) - 1);
 
 export function setApproach(state, productId, approachId) {
   const p = state.products.find((x) => x.id === productId);
@@ -143,6 +151,12 @@ export function setApproach(state, productId, approachId) {
 }
 
 /** What a buyer would pay for a live product line right now. */
+/** $/day a services business can bill with the people it has. */
+export function deliveryCapacity(state, wf, cat) {
+  const units = ((wf?.out?.eng || 0) + (wf?.out?.support || 0) + (wf?.out?.product || 0)) * 0.5;
+  return units * (cat.billable || 0);
+}
+
 export function productSalePrice(state, p) {
   if (p.stage !== 'live') return 0;
   return Math.round(Math.max(20000, p.revenueDay * 320 + p.users * 0.6));
@@ -234,7 +248,9 @@ export function tickProducts(state, mods, wf, days, log) {
 
     // --- acquisition ---
     const qualityMul = 0.45 + 0.85 * p.quality;
-    const organic = cat.growth * (1 + cat.viral * (p.quality - 0.5)) * qualityMul;
+    // A social product is worth more with every user: growth accelerates with scale.
+    const network = cat.network ? 1 + clamp(Math.log10(Math.max(1, p.users / 2000)), 0, 3) * 0.12 : 1;
+    const organic = cat.growth * (1 + cat.viral * (p.quality - 0.5)) * qualityMul * network;
     // Marketing saturates: the more you pour into one market, the less each dollar buys.
     const spend = budget * share;
     const diminish = 1 / (1 + spend / Math.max(250, cap * 0.02));
@@ -256,6 +272,8 @@ export function tickProducts(state, mods, wf, days, log) {
       * (1 - prodSplit * 0.18)
       * (1 + (p.churnMul || 0))
       * (1 + priceWarChurn(state, p.category))
+      // Money products live on trust: weak security drives customers away.
+      * (cat.securityCritical ? 1 + Math.max(0, 0.6 - p.security) * 1.6 : 1)
       * mul(mods, 'churn');
     if (coverage < 1) churnRate *= 1 + (1 - coverage) * 0.3;
     if (outage) churnRate *= 2.5;
@@ -283,6 +301,12 @@ export function tickProducts(state, mods, wf, days, log) {
     let rev = Math.max(0, p.users - paying) * cat.arpu.free;
     for (const k of CLASS_ORDER) rev += (p.customers[k] || 0) * (cat.arpu[k] || 0);
     rev *= mul(mods, 'revenue') * (1 + (p.revMul || 0));
+    // Client work only bills what the team can actually deliver.
+    if (cat.billable) {
+      const cap = deliveryCapacity(state, wf, cat);
+      p.deliveryCap = cap;
+      rev = Math.min(rev, cap);
+    }
     if (outage) rev *= 0.55;
     p.revenueDay = rev;
     revenue += rev;

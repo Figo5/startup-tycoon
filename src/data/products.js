@@ -9,6 +9,7 @@ export const PRODUCT_CATEGORIES = [
     id: 'mobile',
     name: 'Consumer Mobile App',
     blurb: 'Cheap to build, enormous reach, fickle users. Ad revenue carries the free tier.',
+    strategy: 'Consumer growth: marketing and viral quality. Low revenue per user, huge reach.',
     color: 0x4fc3f7,
     mvpWork: 30,
     marketBase: 60000,
@@ -30,6 +31,7 @@ export const PRODUCT_CATEGORIES = [
     id: 'saas',
     name: 'SaaS Productivity Tool',
     blurb: 'The reliable middle of the road. Prosumers and small teams, steady money.',
+    strategy: 'The balanced middle. Rewards steady feature work and a small sales team.',
     color: 0x81c784,
     mvpWork: 70,
     marketBase: 14000,
@@ -51,6 +53,7 @@ export const PRODUCT_CATEGORIES = [
     id: 'devtool',
     name: 'Developer Tool',
     blurb: 'Marketing barely works; word of mouth does. Sticky, cheap to run, loved or ignored.',
+    strategy: 'Word of mouth over marketing. Engineers and quality sell it; very low churn.',
     color: 0xba9cf0,
     mvpWork: 60,
     marketBase: 9000,
@@ -72,6 +75,7 @@ export const PRODUCT_CATEGORIES = [
     id: 'b2b',
     name: 'B2B SaaS Platform',
     blurb: 'Sales-led. Fewer accounts, much larger cheques, and a support queue to match.',
+    strategy: 'Sales-led: salespeople, support and enterprise features. Big contracts.',
     color: 0xffb74d,
     mvpWork: 140,
     marketBase: 2600,
@@ -93,6 +97,7 @@ export const PRODUCT_CATEGORIES = [
     id: 'ai',
     name: 'AI Software Product',
     blurb: 'Grows like wildfire and burns compute like it. Reliability problems get expensive fast.',
+    strategy: 'Explosive growth, ruinous compute. Infrastructure and research carry it.',
     color: 0xf06292,
     mvpWork: 220,
     marketBase: 40000,
@@ -114,6 +119,7 @@ export const PRODUCT_CATEGORIES = [
     id: 'enterprise',
     name: 'Enterprise Software',
     blurb: 'Glacial, procurement-bound, and each logo is worth a small product line.',
+    strategy: 'Slow and enormous. A sales machine with a heavy support queue.',
     color: 0x90a4ae,
     mvpWork: 400,
     marketBase: 700,
@@ -130,10 +136,105 @@ export const PRODUCT_CATEGORIES = [
     infraLoad: 1.5,
     enterprisePotential: 1.0,
     unlock: { stage: 'scaleup' }
+  },
+  {
+    id: 'services',
+    name: 'Consulting Agency',
+    blurb: 'Build software for clients. Cash from week one, but investors value hours far below products.',
+    strategy: 'Favours sales and support. Great for bootstrapping; valued at a third of a product company.',
+    color: 0xa1887f,
+    mvpWork: 36,
+    marketBase: 260,
+    growth: 0.08,
+    seedUsers: 3,
+    marketingUsers: 0.02,
+    salesPull: 1.3,
+    viral: 0.1,
+    conversion: 0.9,
+    classMix: { consumer: 0, smb: 0.7, midmarket: 0.25, enterprise: 0.05 },
+    arpu: { free: 0, consumer: 0, smb: 9, midmarket: 22, enterprise: 60 },
+    churn: 0.012,
+    supportLoad: 30,
+    billable: 115,   // $ per unit of delivery capacity per day
+    infraLoad: 0.2,
+    enterprisePotential: 0.35,
+    valuationMul: 0.33,
+    unlock: null
+  },
+  {
+    id: 'games',
+    name: 'Game Studio',
+    blurb: 'Hit-driven. A great launch is a flood of players; a flop is a quiet month. Sequels matter.',
+    strategy: 'Launches count double: polish, marketing and hype traits pay off. Players churn fast.',
+    color: 0x7986cb,
+    mvpWork: 85,
+    marketBase: 70000,
+    growth: 0.36,
+    seedUsers: 300,
+    marketingUsers: 2.4,
+    salesPull: 0.02,
+    viral: 0.9,
+    conversion: 0.05,
+    classMix: { consumer: 1, smb: 0, midmarket: 0, enterprise: 0 },
+    arpu: { free: 0.004, consumer: 0.45, smb: 1, midmarket: 5, enterprise: 20 },
+    churn: 0.028,
+    supportLoad: 0.5,
+    infraLoad: 2.0,
+    enterprisePotential: 0,
+    hitDriven: true,
+    unlock: { stage: 'tiny' }
+  },
+  {
+    id: 'social',
+    name: 'Social Network',
+    blurb: 'Worth more with every user who joins. Ad-funded, moderation-heavy, and expensive to run.',
+    strategy: 'Network effects: growth accelerates with scale. Needs support (moderation) and infrastructure.',
+    color: 0x4dd0e1,
+    mvpWork: 110,
+    marketBase: 110000,
+    growth: 0.24,
+    seedUsers: 200,
+    marketingUsers: 2.0,
+    salesPull: 0.05,
+    viral: 0.9,
+    conversion: 0.012,
+    classMix: { consumer: 1, smb: 0, midmarket: 0, enterprise: 0 },
+    arpu: { free: 0.011, consumer: 0.3, smb: 1, midmarket: 5, enterprise: 20 },
+    churn: 0.016,
+    supportLoad: 6,
+    infraLoad: 2.6,
+    enterprisePotential: 0,
+    network: true,
+    unlock: { stage: 'seed' }
+  },
+  {
+    id: 'fintech',
+    name: 'Fintech App',
+    blurb: 'Money is sticky and lucrative, and customers leave the moment they stop trusting you.',
+    strategy: 'High revenue per customer. Security below 60% drives churn; security work pays twice.',
+    color: 0x66bb6a,
+    mvpWork: 170,
+    marketBase: 16000,
+    growth: 0.18,
+    seedUsers: 60,
+    marketingUsers: 0.9,
+    salesPull: 0.5,
+    viral: 0.35,
+    conversion: 0.16,
+    classMix: { consumer: 0.6, smb: 0.3, midmarket: 0.1, enterprise: 0 },
+    arpu: { free: 0, consumer: 0.9, smb: 3.2, midmarket: 14, enterprise: 50 },
+    churn: 0.007,
+    supportLoad: 2.2,
+    infraLoad: 0.9,
+    enterprisePotential: 0.5,
+    securityCritical: true,
+    unlock: { stage: 'seed' }
   }
 ];
 
 export const categoryById = (id) => PRODUCT_CATEGORIES.find((c) => c.id === id);
+/** Categories a brand-new company can start with. */
+export const startCategories = () => PRODUCT_CATEGORIES.filter((c) => !c.unlock);
 
 // Development projects a product can have queued. `work` is in engineering-days
 // at 1.0 productivity and scales with the category's mvpWork.
@@ -193,15 +294,15 @@ export const PROJECT_TYPES = [
   },
   {
     id: 'major', name: 'Next Major Version', repeatable: true, workMul: 1.5, launch: 0.15,
-    desc: 'A relaunch: v2, v3... Big quality and market jump, clears some debt, and gets a launch of its own. Needs 4 feature updates since the last one.',
+    desc: 'A relaunch: v2, v3... Big quality and market jump, clears some debt, and gets a launch of its own. Needs 4 feature updates for v2, and two more for each version after that.',
     effects: { quality: 0.16, market: 0.22, debt: -0.12, reputation: 0.06, majorVersion: true },
     requires: { featuresSinceMajor: 4 }
   }
 ];
 
-// Projects that go out to customers get a launch: a roll against quality,
-// polish, marketing and the people who shipped it.
-export const LAUNCHABLE = new Set(['mvp', 'feature', 'mobileport', 'aifeature', 'i18n', 'enterprise', 'major']);
+// Projects that go out to customers as a *launch* get a roll against quality,
+// polish, marketing and the people who shipped it. Routine updates just ship.
+export const LAUNCHABLE = new Set(['mvp', 'mobileport', 'i18n', 'enterprise', 'major']);
 
 /**
  * How a product team builds. Chosen per product; each queued project keeps the
@@ -222,10 +323,12 @@ export const APPROACHES = [
 export const approachById = (id) => APPROACHES.find((a) => a.id === id) || APPROACHES[1];
 
 export const LAUNCH_OUTCOMES = [
-  { id: 'flop', name: 'Flop', below: 0.28 },
-  { id: 'solid', name: 'Solid', below: 0.6 },
-  { id: 'hit', name: 'Hit', below: 0.86 },
+  { id: 'flop', name: 'Flop', below: 0.2 },
+  { id: 'solid', name: 'Solid', below: 0.56 },
+  { id: 'hit', name: 'Hit', below: 0.84 },
   { id: 'viral', name: 'Viral', below: Infinity }
 ];
+// Routine updates get a muted launch; firsts and relaunches get the full one.
+export const BIG_LAUNCHES = new Set(['mvp', 'major', 'mobileport', 'i18n', 'enterprise']);
 
 export const projectTypeById = (id) => PROJECT_TYPES.find((p) => p.id === id);

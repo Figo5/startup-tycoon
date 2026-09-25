@@ -5,9 +5,10 @@
 
 import { clamp } from './util.js';
 import { rnd, range } from './rng.js';
-import { LAUNCHABLE, LAUNCH_OUTCOMES, approachById, projectTypeById } from '../data/products.js';
+import { LAUNCHABLE, LAUNCH_OUTCOMES, BIG_LAUNCHES, approachById, projectTypeById, categoryById } from '../data/products.js';
 import { traitList, addStory } from './state.js';
 import { flat } from './modifiers.js';
+import { marketCap } from './products.js';
 import { trendFor } from './market.js';
 
 /** Picks who gets the credit: an engineer (or product person), weighted by output. */
@@ -26,7 +27,8 @@ export function launchFactors(state, mods, p, prj, lead) {
   const type = projectTypeById(prj.typeId);
   const ap = approachById(prj.approach);
   const f = [];
-  f.push(['Product quality', p.quality * 0.75]);
+  f.push(['Product quality', p.quality * 0.42]);
+  if (prj.typeId === 'mvp') f.push(['First-launch goodwill', 0.12]);
   if (ap.launch) f.push([`${ap.name} approach`, ap.launch]);
   if (type?.launch) f.push([type.name, type.launch]);
   let traitBonus = 0;
@@ -51,29 +53,36 @@ export function launchFactors(state, mods, p, prj, lead) {
 export function rollLaunch(state, mods, p, prj, lead, log) {
   if (!LAUNCHABLE.has(prj.typeId)) return null;
   const factors = launchFactors(state, mods, p, prj, lead);
-  const base = factors.reduce((a, [, v]) => a + v, 0);
+  // Quality is the backbone. Everything else helps, with diminishing returns,
+  // so no pile of perks turns every launch into a viral one.
+  const quality = factors.filter(([k]) => k === 'Product quality').reduce((a, [, v]) => a + v, 0);
+  const extras = factors.filter(([k]) => k !== 'Product quality').reduce((a, [, v]) => a + v, 0);
+  const base = quality + (extras > 0 ? 0.26 * Math.tanh(extras / 0.26) : extras);
   const luck = range(state.rng, -0.22, 0.22);
   const score = base + luck;
   const outcome = LAUNCH_OUTCOMES.find((o) => score < o.below);
   const day = state.time.day;
   const isMvp = prj.typeId === 'mvp';
   const label = `${p.name} ${isMvp ? 'launch' : prj.name}`;
+  // Hit-driven categories (games) swing harder both ways.
+  const swing = (categoryById(p.category)?.hitDriven ? 1.6 : 1) * (BIG_LAUNCHES.has(prj.typeId) ? 1 : 0.5);
 
   if (outcome.id === 'flop') {
     state.company.reputation = clamp(state.company.reputation - 0.05, 0.2, 60);
-    if (!isMvp) p.users *= 0.97;
+    if (!isMvp) p.users *= categoryById(p.category)?.hitDriven ? 0.9 : 0.97;
     for (const e of state.employees) e.morale = clamp(e.morale - 0.03, 0, 1.1);
     log?.(`${label} flopped. Reviews were unkind.`, 'bad');
   } else if (outcome.id === 'solid') {
     log?.(`${label} landed solidly.`, 'good');
   } else if (outcome.id === 'hit') {
-    p.hype = { until: day + 10, acq: 0.3, label: 'Hit launch' };
+    p.hype = { until: day + 10 * swing, acq: 0.3 * swing, label: 'Hit launch' };
     state.company.reputation = clamp(state.company.reputation + 0.05, 0.2, 60);
     for (const e of state.employees) e.morale = clamp(e.morale + 0.04, 0, 1.1);
     log?.(`${label} is a HIT. Sign-ups are surging.`, 'launch');
   } else {
-    p.hype = { until: day + 8, acq: 0.8, label: 'Went viral' };
-    p.users += p.users * 0.08 + (isMvp ? 400 : 1500);
+    p.hype = { until: day + 8 * swing, acq: 0.8 * swing, label: 'Went viral' };
+    const cap = Math.max(50, marketCap(state, mods, p));
+    p.users = Math.max(p.users, Math.min(cap * 1.05, p.users + (p.users * 0.08 + (isMvp ? 400 : 1500)) * swing));
     state.company.reputation = clamp(state.company.reputation + 0.15, 0.2, 60);
     for (const e of state.employees) e.morale = clamp(e.morale + 0.08, 0, 1.1);
     log?.(`${label} went VIRAL. Everyone is talking about ${p.name}.`, 'launch');
