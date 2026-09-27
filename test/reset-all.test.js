@@ -2,6 +2,7 @@
 // first-ever player sees, with no trace of the old run or old founder meta left
 // anywhere a later load could pick it up.
 import test from 'node:test';
+import { achievementById } from '../src/data/legacy.js';
 import assert from 'node:assert/strict';
 
 // A minimal localStorage, installed before the save layer is imported so its
@@ -174,8 +175,13 @@ test('offline catch-up cannot bring deleted progress back', () => {
   // no reputation, no upgrades, no run history, no equity already sold.
   state.time.lastRealMs -= 12 * 3600 * 1000;
   runOffline(state);
-  assert.equal(state.meta.founderRep, 0);
-  assert.equal(state.meta.lifetimeRep, 0);
+  // The only reputation a fresh company can hold is from achievements it
+  // earned itself during those twelve hours - never anything from before.
+  const earned = state.meta.achievements.map((id) => achievementById(id));
+  assert.ok(earned.every((a) => a && a.check && !a.atExit), 'only in-play achievements, earned just now');
+  const fr = earned.reduce((t, a) => t + a.fr, 0);
+  assert.equal(state.meta.founderRep, fr);
+  assert.equal(state.meta.lifetimeRep, fr);
   assert.equal(Object.values(state.meta.upgrades).filter((v) => v !== 0).length, 0);
   assert.deepEqual(state.meta.runs, []);
   assert.equal(state.company.founderEquity, 1);

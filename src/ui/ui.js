@@ -2,12 +2,12 @@ import { money, abbrev, pct, fmtDuration, clamp, uid } from '../sim/util.js';
 import { stageById } from '../data/stages.js';
 import { eventById } from '../data/events.js';
 import { PANELS, PANEL_TITLES, employeeCard, prestige } from './panels.js';
-import { eventText, choiceCost, resolveEvent } from '../sim/events.js';
-import { hire, fire, promote, reassign, setManager } from '../sim/workforce.js';
-import { queueProject, createProduct } from '../sim/products.js';
+import { eventText, choiceCost, resolveEvent, visibleChoices, labelFor } from '../sim/events.js';
+import { hire, fire, promote, reassign, setManager, sendOnLeave, setPace, giveRaise } from '../sim/workforce.js';
+import { queueProject, createProduct, setApproach, sellProduct, productSalePrice } from '../sim/products.js';
 import { startResearch, cancelResearch } from '../sim/research.js';
-import { raise } from '../sim/funding.js';
-import { upgradeOffice, buyRoom } from '../sim/office.js';
+import { raise, takeLoan } from '../sim/funding.js';
+import { upgradeOffice, buyRoom, removeRoom } from '../sim/office.js';
 import { acquire } from '../sim/competitors.js';
 import { setCapacity, computeLoad } from '../sim/infra.js';
 import { performExit } from '../sim/prestige.js';
@@ -18,17 +18,26 @@ import { hireAdvisor, dismissAdvisor } from '../sim/advisors.js';
 import { acquireCompany } from '../sim/acquisitions.js';
 import { acceptGoal, abandonGoal } from '../sim/goals.js';
 import { playMinigame, MINIGAMES } from '../minigames/index.js';
+import { founderActionStatus, useFounderAction } from '../sim/org.js';
+import { leaderboard } from '../sim/competitors.js';
+import { marketCap } from '../sim/products.js';
+import { stageProgress } from '../sim/stages.js';
+import { economyNow, trendFor } from '../sim/market.js';
+import { paceById } from '../data/traits.js';
+import { approachById } from '../data/products.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 /** Panels in keyboard order: 1-9 then 0. */
 export const PANEL_ORDER = ['company', 'products', 'employees', 'departments', 'research',
   'finance', 'office', 'competitors', 'advisors', 'goals'];
+// Reachable by letter rather than number.
+const PANEL_KEYS = { l: 'legacy' };
 
 // A purchase is refused if the same control is triggered again inside this
 // window. A double click is one interaction; it must buy one level.
 const REPEAT_GUARD_MS = 450;
-const PURCHASE_ACTIONS = new Set(['buy-prestige', 'room', 'office', 'new-product', 'research',
+const PURCHASE_ACTIONS = new Set(['pitch', 'loan', 'sell-product', 'buy-prestige', 'room', 'office', 'new-product', 'research',
   'raise', 'acquire', 'acquire-company', 'advisor-hire', 'roadmap-start', 'hire']);
 
 export function createUI(app) {
@@ -36,8 +45,11 @@ export function createUI(app) {
     company: $('#company-name'), stage: $('#stage-chip'), stats: $('#stats'),
     events: $('#events'), feed: $('#feed'), tabs: $('#tabs'),
     drawer: $('#drawer'), drawerTitle: $('#drawer-title'), drawerBody: $('#drawer-body'),
-    overlay: $('#overlay'), overlayCard: $('#overlay-card'), pause: $('#btn-pause')
+    overlay: $('#overlay'), overlayCard: $('#overlay-card'), pause: $('#btn-pause'),
+    founderBar: $('#founder-bar'), hud: $('#office-hud')
   };
+  let lastBarSig = '';
+  let lastHudSig = '';
   let openPanel = null;
   let lastEventSig = '';
   let lastPanelHtml = '';
@@ -48,7 +60,7 @@ export function createUI(app) {
   function pushFeed(text, kind = 'info') {
     const li = document.createElement('li');
     li.className = kind;
-    li.innerHTML = `<span class="tag">${kind === 'good' ? '+' : kind === 'bad' ? '!' : kind === 'stage' || kind === 'goal' ? '★' : kind === 'event' ? '◆' : '·'}</span><span>${escapeHtml(text)}</span>`;
+    li.innerHTML = `<span class="tag">${kind === 'good' ? '+' : kind === 'bad' ? '!' : kind === 'stage' || kind === 'goal' || kind === 'launch' ? '★' : kind === 'event' ? '◆' : kind === 'market' ? '▲' : kind === 'rival' ? '⚔' : '·'}</span><span>${escapeHtml(text)}</span>`;
     els.feed.prepend(li);
     while (els.feed.children.length > 80) els.feed.lastChild.remove();
   }
@@ -84,6 +96,54 @@ export function createUI(app) {
     }
   }
 
+  // ------------------------------------------------------- founder bar
+  function renderFounderBar() {
+    if (!els.founderBar) return;
+    const s = app.state;
+    const acts = founderActionStatus(s).filter((a) => !a.locked);
+    const sig = acts.map((a) => `${a.id}:${a.available}:${Math.ceil(Math.max(0, a.readyAt - s.time.day) * 10)}`).join('|');
+    if (sig === lastBarSig) return;
+    lastBarSig = sig;
+    els.founderBar.innerHTML = acts.map((a) => {
+      const left = Math.max(0, a.readyAt - s.time.day);
+      const frac = a.cooling ? 1 - left / a.cooldown : 1;
+      return `<button class="fa${a.available ? '' : ' off'}" data-act="founder-action" data-id="${a.id}"${a.available ? '' : ' disabled'}
+        title="${escapeHtml(a.name)} (${a.key}) — ${escapeHtml(a.desc)}${a.reason ? ` [${escapeHtml(a.reason)}${a.cooling ? `: ${fmtDuration(left)}` : ''}]` : ''}">
+        <span class="fa-key">${a.key}</span><span class="fa-name">${escapeHtml(a.name)}</span>
+        <i style="width:${Math.round(frac * 100)}%"></i></button>`;
+    }).join('');
+  }
+
+  // --------------------------------------------------------------- hud
+  function renderHud() {
+    if (!els.hud) return;
+    const s = app.state;
+    const prog = stageProgress(s);
+    const building = s.products.filter((p) => p.projects.length).slice(0, 3).map((p) => {
+      const j = p.projects[0];
+      return { n: `${p.name}: ${j.name}`, pct: j.done / Math.max(1, j.work), ap: j.approach };
+    });
+    const chips = [];
+    const econ = economyNow(s);
+    if (s.time.day >= 18 && econ.id !== 'normal') chips.push([econ.name, econ.id === 'boom' ? 'good' : 'bad']);
+    for (const cat of new Set(s.products.map((p) => p.category))) {
+      const t = trendFor(s, cat);
+      if (t) chips.push([t.name, t.negative ? 'bad' : 'good']);
+    }
+    const pace = paceById(s.company.pace);
+    if (pace.id !== 'normal') chips.push([pace.name, pace.id === 'crunch' ? 'bad' : 'good']);
+    for (const p of s.products) if (p.hype && p.hype.until > s.time.day) chips.push([`${p.name}: ${p.hype.label}`, 'accent']);
+    const target = (s.funding.targets || []).find((t) => t.status === 'open');
+    if (target) chips.push([`Board target ${fmtDuration(Math.max(0, target.deadline - s.time.day))}`, 'warn']);
+    const sig = JSON.stringify([prog?.stage.id, Math.round((prog?.pct || 0) * 50), building.map((b) => [b.n, Math.round(b.pct * 40)]), chips]);
+    if (sig === lastHudSig) return;
+    lastHudSig = sig;
+    els.hud.innerHTML = `
+      ${prog ? `<div class="hud-row"><span>Next: ${escapeHtml(prog.stage.name)}</span><span class="hud-bar"><i style="width:${Math.round(prog.pct * 100)}%"></i></span></div>` : ''}
+      ${building.map((b) => `<div class="hud-row small"><span>${escapeHtml(b.n)}${b.ap && b.ap !== 'standard' ? ` (${escapeHtml(approachById(b.ap).name)})` : ''}</span><span class="hud-bar work"><i style="width:${Math.round(b.pct * 100)}%"></i></span></div>`).join('')}
+      ${chips.length ? `<div class="hud-chips">${chips.map(([t, k]) => `<span class="hud-chip ${k}">${escapeHtml(t)}</span>`).join('')}</div>` : ''}`;
+  }
+
   // ------------------------------------------------------------ events
   function renderEvents() {
     const s = app.state;
@@ -101,11 +161,11 @@ export function createUI(app) {
       return `<div class="tile event-card">
         <h3>${escapeHtml(def.title)}<span class="tag">${fmtDuration(left)} left</span></h3>
         <p>${escapeHtml(eventText(s, p))}</p>
-        ${def.choices.map((c) => {
-          const cost = choiceCost(s, c);
+        ${visibleChoices(s, def, p).map((c) => {
+          const cost = choiceCost(s, c, p);
           const poor = cost > s.company.cash;
           return `<button class="choice" data-act="event" data-id="${p.id}|${c.id}"${poor ? ' disabled' : ''}>
-            <b>${escapeHtml(c.label)}${cost ? ` — ${money(cost)}` : ''}${c.minigame ? ' ▶' : ''}</b>
+            <b>${escapeHtml(labelFor(s, c, p))}${cost ? ` — ${money(cost)}` : ''}${c.minigame ? ' ▶' : ''}</b>
             ${escapeHtml(c.desc || (c.minigame ? MINIGAMES[c.minigame].blurb : ''))}${poor ? ' (not enough cash)' : ''}</button>`;
         }).join('')}
       </div>`;
@@ -122,8 +182,13 @@ export function createUI(app) {
   }
 
   // ------------------------------------------------------------ panels
+  // While the pointer is moving over the panel, the player is about to click
+  // something: do not swap the HTML out from under them. Actions force a render.
+  let lastPanelPointer = 0;
+  const PANEL_HOLD_MS = 1500;
   function renderPanel(force = false) {
     if (!openPanel) return;
+    if (!force && Date.now() - lastPanelPointer < PANEL_HOLD_MS) return;
     const html = PANELS[openPanel](ctx());
     if (!force && html === lastPanelHtml) return;
     lastPanelHtml = html;
@@ -193,7 +258,7 @@ export function createUI(app) {
         if (choice?.minigame) {
           const score = await runMinigame(choice.minigame);
           applyMinigameReward(s, mods, choice.minigame, score, pending);
-          const fallback = def.choices.find((c) => !c.minigame && choiceCost(s, c) <= s.company.cash) || def.choices[0];
+          const fallback = def.choices.find((c) => !c.minigame && choiceCost(s, c, pending) <= s.company.cash) || def.choices[0];
           done(resolveEvent(s, mods, pid, fallback.id, app.log));
         } else {
           done(resolveEvent(s, mods, pid, cid, app.log));
@@ -206,12 +271,10 @@ export function createUI(app) {
         if (!confirm(`Let ${e?.name} go? Severance is one month of salary and the team will notice.`)) return;
         done(fire(s, id)); hideOverlay(); break;
       }
-      case 'promote': done(promote(s, id)); break;
-      case 'give-raise': {
-        const e = s.employees.find((x) => x.id === id);
-        if (e) { e.salary = Math.round(e.salary * 1.1); e.morale = clamp(e.morale + 0.12, 0, 1.1); }
-        showOverlay(employeeCard(ctx(), id)); done(null); break;
-      }
+      case 'promote': { const r = promote(s, id); if (r.ok) showOverlay(employeeCard(ctx(), id)); done(r, r.ok ? `Promoted to ${r.role}.` : null); break; }
+      case 'give-raise': { const r = giveRaise(s, id); showOverlay(employeeCard(ctx(), id)); done(r); break; }
+      case 'leave': { const r = sendOnLeave(s, id); showOverlay(employeeCard(ctx(), id)); done(r, r.ok ? 'Out of office for five days.' : null); break; }
+      case 'pace': done(setPace(s, id)); break;
       case 'reassign-select': done(reassign(s, id, el.value)); break;
       case 'employee': showOverlay(employeeCard(ctx(), id)); break;
       case 'close-overlay': hideOverlay(); break;
@@ -220,6 +283,13 @@ export function createUI(app) {
         const p = s.products.find((x) => x.id === id);
         if (p) p.priority = Number(el.dataset.val);
         done(null); break;
+      }
+      case 'approach': { const [pid, aid] = id.split('|'); done(setApproach(s, pid, aid)); break; }
+      case 'sell-product': {
+        const p = s.products.find((x) => x.id === id);
+        if (!p || !confirm(`Sell ${p.name} for ${money(productSalePrice(s, p))}? Its users and customers go with it.`)) return;
+        done(sellProduct(s, id, app.log));
+        break;
       }
       case 'new-product': done(createProduct(s, mods, id), 'New product started.'); break;
       case 'priority-dept': { const [d, p] = id.split('|'); s.departments[d].priority = p; done(null); break; }
@@ -236,9 +306,22 @@ export function createUI(app) {
         else setCapacity(s, s.infra.capacity + Number(id));
         done(null); break;
       }
-      case 'raise': done(raise(s, mods, id), 'Round closed.'); break;
+      case 'raise': { const [rid, inv] = id.split('|'); const r = raise(s, mods, rid, inv || 'lead'); done(r, r.ok ? `Round closed: ${money(r.offer.cash)} from ${r.offer.name}.` : null); break; }
+      case 'pitch': {
+        const [rid, inv] = id.split('|');
+        const score = await runMinigame('pitch', pitchFacts(s, mods));
+        s.funding.bonus = Math.max(s.funding.bonus || 1, 1 + 0.15 * score);
+        const r = raise(s, mods, rid, inv || 'lead');
+        done(r, r.ok ? `Pitch ${Math.round(score * 100)}%: raised ${money(r.offer.cash)}.` : null);
+        break;
+      }
+      case 'loan': { const r = takeLoan(s); done(r, r.ok ? `Borrowed ${money(r.principal)}.` : null); break; }
       case 'office': done(upgradeOffice(s), 'New office. Everyone is moving desks.'); break;
       case 'room': done(buyRoom(s, id), 'Built.'); break;
+      case 'room-remove': {
+        if (!confirm('Knock this room down? The slot is freed; nothing is refunded.')) return;
+        done(removeRoom(s, id), 'Room removed.'); break;
+      }
       case 'acquire': done(acquire(s, mods, id), 'Acquisition complete.'); break;
       case 'acquire-company': {
         const r = acquireCompany(s, mods, id);
@@ -284,21 +367,27 @@ export function createUI(app) {
         done(r, r.ok ? `${id.replace(/_/g, ' ')} is now level ${r.level}.` : null);
         break;
       }
+      case 'founder-action': {
+        const r = useFounderAction(s, id, app.log);
+        if (r.ok) app.game?.scene?.getScene('office')?.founderAction?.(id);
+        done(r); lastBarSig = ''; renderFounderBar(); break;
+      }
       case 'exit': app.onExit(id); break;
       case 'exit-summary': app.showExitSummary(); break;
       case 'save-now': app.save(); app.notify('Saved.', 'good'); break;
       case 'export': app.exportSave(); break;
       case 'import': app.importSave(); break;
       case 'reset': app.resetGame(); break;
+      case 'found-company': app.foundCompany({ title: 'Found your company', note: 'Choose how this company starts. You can always start another later.', replaceCurrent: true }); break;
       case 'reset-all': app.resetAllProgress(); break;
       default: break;
     }
   }
 
-  async function runMinigame(type) {
+  async function runMinigame(type, ctxData = null) {
     return new Promise((resolve) => {
       els.overlay.hidden = false;
-      playMinigame(type, els.overlayCard).then((score) => {
+      playMinigame(type, els.overlayCard, ctxData).then((score) => {
         els.overlayCard.innerHTML = `<h2>${MINIGAMES[type].name}</h2>
           <p>Result: <b>${Math.round(score * 100)}%</b></p>
           <p class="muted small">${score > 0.8 ? 'Excellent. The bonus is substantial.' : score > 0.4 ? 'Solid work.' : 'Not your best. A small bonus all the same.'}</p>
@@ -314,6 +403,9 @@ export function createUI(app) {
     if (b) showPanel(b.dataset.panel);
   });
   $('#drawer-close').addEventListener('click', hidePanel);
+  for (const ev of ['pointermove', 'pointerdown', 'wheel']) {
+    els.drawer.addEventListener(ev, () => { lastPanelPointer = Date.now(); }, { passive: true });
+  }
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
@@ -338,14 +430,50 @@ export function createUI(app) {
     if (e.code === 'Space' && els.overlay.hidden) { e.preventDefault(); app.togglePause(); }
     const n = e.key === '0' ? 10 : Number(e.key);
     if (n >= 1 && n <= PANEL_ORDER.length && els.overlay.hidden) showPanel(PANEL_ORDER[n - 1]);
+    if (PANEL_KEYS[e.key?.toLowerCase?.()] && els.overlay.hidden) showPanel(PANEL_KEYS[e.key.toLowerCase()]);
     if (e.key === '?') app.showHelp();
+    if (els.overlay.hidden && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const fa = founderActionStatus(app.state).find((a) => a.key.toLowerCase() === e.key.toLowerCase());
+      if (fa) dispatch('founder-action', fa.id, null);
+    }
   });
 
   return {
-    render() { renderTop(); renderEvents(); renderPanel(); },
+    render() { renderTop(); renderEvents(); renderPanel(); renderFounderBar(); renderHud(); },
     renderPanelNow() { renderPanel(true); },
     pushFeed, showOverlay, hideOverlay, showPanel, hidePanel,
     get openPanel() { return openPanel; }
+  };
+}
+
+/** The real numbers an investor pitch is built from. */
+export function pitchFacts(s, mods) {
+  const live = s.products.filter((p) => p.stage === 'live');
+  const users = live.reduce((a, p) => a + p.users, 0);
+  const cust = s.stats.customers || 0;
+  const staff = s.employees;
+  const avgChurn = live.length ? live.reduce((a, p) => a + (p.churnDay || 0) * p.users, 0) / Math.max(1, users) : 0.02;
+  const board = leaderboard(s);
+  const cap = live.reduce((a, p) => a + marketCap(s, mods, p), 0);
+  const trend = [...new Set(live.map((p) => p.category))].map((c) => trendFor(s, c)).find((t) => t && !t.negative);
+  return {
+    growth: Math.max(-1, Math.min(3, (s.stats.growthRate || 0))) / 3,
+    monthlyChurn: Math.min(1, avgChurn * 30),
+    margin: s.stats.revenueDay > 0 ? s.stats.netDay / s.stats.revenueDay : -1,
+    people: staff.length,
+    skill: staff.reduce((a, e) => a + e.skill, 0) / Math.max(1, staff.length),
+    quality: live.length ? Math.max(...live.map((p) => p.quality)) : 0.4,
+    reputation: s.company.reputation,
+    penetration: cap > 0 ? users / cap : 0,
+    rank: board.findIndex((r) => r.you) + 1,
+    field: board.length,
+    trend: trend?.name || null,
+    users: Math.round(users),
+    conversion: users > 0 ? cust / users : 0,
+    contracts: s.contracts.length,
+    runwayDays: s.stats.netDay >= 0 ? Infinity : s.company.cash / -s.stats.netDay,
+    runwayText: s.stats.netDay >= 0 ? 'profitable' : fmtDuration(s.company.cash / -s.stats.netDay),
+    debt: live.length ? Math.max(...live.map((p) => p.techDebt)) / 2 : 0
   };
 }
 

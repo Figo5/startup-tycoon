@@ -1,21 +1,25 @@
 import { money, abbrev, pct, fmtDuration, clamp } from '../sim/util.js';
 import { STAGES, stageById, stageOrder } from '../data/stages.js';
 import { DEPARTMENTS, departmentById, roleById, ROLES } from '../data/roles.js';
-import { PROJECT_TYPES, categoryById, CUSTOMER_CLASSES } from '../data/products.js';
-import { RESEARCH, RESEARCH_CATEGORIES, researchById } from '../data/research.js';
+import { PROJECT_TYPES, categoryById, CUSTOMER_CLASSES, APPROACHES, approachById } from '../data/products.js';
+import { trendFor, economyNow, ensureMarket } from '../sim/market.js';
+import { ECONOMY, trendDefById } from '../data/market.js';
+import { RESEARCH, RESEARCH_CATEGORIES, researchById, DOCTRINES } from '../data/research.js';
 import { OFFICE_TIERS, ROOMS } from '../data/office.js';
 import { PRESTIGE_UPGRADES } from '../data/prestige.js';
 import {
   liveProducts, totalCustomers, marketCap, projectAvailable, suggestProject, maxProducts,
-  availableCategories, productCost, classMix
+  availableCategories, productCost, classMix, productSalePrice, featuresForMajor
 } from '../sim/products.js';
 import { stageProgress } from '../sim/stages.js';
 import { computeWorkforce, deskPressure, marketSalary, prioritySplit, hireCost } from '../sim/workforce.js';
 import { researchStatus, researchSlots } from '../sim/research.js';
-import { fundingOffers } from '../sim/funding.js';
+import { fundingOffers, loanOffer } from '../sim/funding.js';
 import { exitPreview, prestigeLevels } from '../sim/prestige.js';
-import { officeOptions, roomOptions } from '../sim/office.js';
-import { acquisitionTargets, marketShares } from '../sim/competitors.js';
+import { officeOptions, roomOptions, roomUpkeep } from '../sim/office.js';
+import { roomSlots } from '../data/office.js';
+import { acquisitionTargets, marketShares, leaderboard } from '../sim/competitors.js';
+import { PERSONALITIES } from '../data/competitors.js';
 import { effectiveCapacity, UNIT_COST_DAY } from '../sim/infra.js';
 import { has } from '../sim/modifiers.js';
 import { roadmapChoices, roadmapProgress, ensureRoadmap, activeInitiatives, initiativeEffort, INITIATIVE_COMMIT, initiativeBudget, initiativesUsed } from '../sim/roadmap.js';
@@ -24,7 +28,20 @@ import { advisorOffers, advisorSlots, ensureAdvisors } from '../sim/advisors.js'
 import { acquisitionOffers, integrationActive } from '../sim/acquisitions.js';
 import { goalsSummary, goalProgress } from '../sim/goals.js';
 import { GOALS as GOAL_DEFS } from '../data/goals.js';
+import { RARITIES, PACES, levelName, traitById, jobTitle } from '../data/traits.js';
+import { ACHIEVEMENTS, CHALLENGES, START_UNLOCKS, backgroundById, challengeById } from '../data/legacy.js';
+import { backgroundOptions, challengesUnlocked, startCategoriesFor } from '../sim/legacy.js';
+import { SCENARIOS } from '../data/prestige.js';
+import { metaEffects } from '../sim/state.js';
+import { traitList } from '../sim/state.js';
+import { onLeave, isBurntOut, energyTarget, fairSalary } from '../sim/workforce.js';
+import { deptPerks, activeSynergies, deptCounts } from '../sim/org.js';
 
+export const traitTag = (t) => `<span class="tag trait trait-${t.rarity}" title="${String(t.desc).replace(/"/g, '&quot;')}">${t.rarity === 'legendary' ? '★ ' : t.rarity === 'rare' ? '◆ ' : ''}${String(t.name)}</span>`;
+const traitTags = (e) => traitList(e).map(traitTag).join('');
+const energyBar = (e) => bar(e.energy ?? 0.9, (e.energy ?? 0.9) > 0.5 ? 'good' : (e.energy ?? 0.9) > 0.25 ? 'warn' : 'bad', `${e.name} energy`);
+const statusTags = (state, e) => (onLeave(state, e) ? '<span class="tag" style="color:var(--info)">on leave</span>' : '')
+  + (isBurntOut(e) && !onLeave(state, e) ? '<span class="tag" style="color:var(--bad);border-color:var(--bad)">burnt out</span>' : '');
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const bar = (v, cls = '', label = '') =>
   `<div class="bar ${cls}"${label ? ` role="img" aria-label="${esc(label)}"` : ''}><i style="width:${clamp(v, 0, 1) * 100}%"></i></div>`;
@@ -47,12 +64,14 @@ const EFFECT_LABELS = {
   staffChurn: 'staff attrition', hireQuality: 'candidate quality', candidateRefresh: 'candidate throughput',
   projectQuality: 'project outcomes', fundingValuation: 'investor valuations', valuation: 'valuation',
   reputationGain: 'reputation growth', capacityPerUnit: 'capacity per unit', managerBonus: 'manager effect',
-  deptBonus: 'department effect', moraleGain: 'morale', candidateSlots: 'candidate slots'
+  deptBonus: 'department effect', moraleGain: 'morale', candidateSlots: 'candidate slots',
+  launch: 'launch outcomes', viral: 'word of mouth', rivalPressure: 'rival pressure', revenue: 'revenue',
+  rest: 'team energy', legendaryTalent: 'legendary candidates'
 };
 
 function effectChip(k, v) {
   const shown = ABS_EFFECTS.has(k) ? `${v > 0 ? '+' : ''}${Math.round(v * 100) / 100}` : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
-  const good = k === 'techDebt' || k === 'churn' || k === 'churnMul' || k === 'payroll' || k === 'infraCost' || k === 'outageRisk' || k === 'staffChurn' || k === 'supportLoadMod' ? v < 0 : v > 0;
+  const good = ['techDebt', 'churn', 'churnMul', 'payroll', 'infraCost', 'outageRisk', 'outageDuration', 'staffChurn', 'supportLoadMod', 'debtRate', 'rivalPressure'].includes(k) ? v < 0 : v > 0;
   return `<span class="tag" style="color:var(--${good ? 'good' : 'bad'});border-color:var(--${good ? 'good' : 'bad'})">${esc(shown)} ${esc(EFFECT_LABELS[k] || k)}</span>`;
 }
 const effectRow = (effects = {}) => Object.entries(effects)
@@ -60,8 +79,8 @@ const effectRow = (effects = {}) => Object.entries(effects)
 
 export const PANEL_TITLES = {
   company: 'Company', products: 'Products', employees: 'Employees', departments: 'Departments',
-  research: 'Research', finance: 'Finance', office: 'Office', competitors: 'Competitors',
-  advisors: 'Advisors', goals: 'Company goals'
+  research: 'Research', finance: 'Finance', office: 'Office', competitors: 'Market & rivals',
+  advisors: 'Advisors', goals: 'Company goals', legacy: 'Founder legacy'
 };
 
 // ---------------------------------------------------------------- Company
@@ -105,13 +124,15 @@ export function company(ctx) {
     <hr />` : exits.some((e) => e.available) ? `
     <h3>Exit</h3>
     <p class="muted small">Ending the run converts your stake into Founder Reputation, which is permanent.
-    An exit sells 100% of the stake you still hold, once: it cannot be taken again afterwards.</p>
+    An exit sells 100% of the stake you still hold, once: it cannot be taken again afterwards. Smaller exits are
+    always on the table; the big ones need the Late Stage or a buyer who comes to you.</p>
     <div class="grid two">${exits.map((e) => `
       <div class="tile">
         <h3>${esc(e.name)}<span class="tag">${e.rep} FR</span></h3>
         <p>${esc(e.blurb)}</p>
         <div class="spread small"><span>Company value</span><b>${money(e.value)}</b></div>
         <div class="spread small"><span>Your ${pct(state.company.founderEquity)} stake</span><b>${money(e.proceeds)}</b></div>
+        ${e.partner ? `<div class="small muted">With ${esc(e.partner)}</div>` : ''}
         ${btn('exit', e.available ? `Take the ${e.name}` : e.reason || 'Unavailable', { id: e.id, disabled: !e.available })}
       </div>`).join('')}</div><hr />` : '';
 
@@ -241,13 +262,16 @@ export function products(ctx) {
     return `
       <div class="tile">
         <h3>${esc(p.name)} <span class="tag">${esc(cat.name)}</span>
-          <span class="tag">v${p.version.toFixed(1)}</span>${p.outage > 0 ? '<span class="tag" style="color:var(--bad);border-color:var(--bad)">OUTAGE</span>' : ''}</h3>
+          <span class="tag">v${p.version.toFixed(1)}</span>${p.outage > 0 ? '<span class="tag" style="color:var(--bad);border-color:var(--bad)">OUTAGE</span>' : ''}${p.hype && p.hype.until > state.time.day ? `<span class="tag" style="color:var(--accent);border-color:var(--accent)">${esc(p.hype.label)} · ${fmtDuration(p.hype.until - state.time.day)}</span>` : ''}</h3>
         <p>${esc(cat.blurb)}</p>
+        ${(() => { const t = trendFor(state, p.category); return t ? `<p class="small" style="color:var(--${t.negative ? 'bad' : 'good'})">${t.negative ? '▼' : '▲'} ${esc(t.name)}: market ${t.marketSize > 0 ? '+' : ''}${Math.round(t.marketSize * 100)}%, launches ${t.launch > 0 ? '+' : ''}${Math.round(t.launch * 100)} for ${fmtDuration(t.until - state.time.day)}</p>` : ''; })()}
         ${p.stage === 'development' ? '<p class="muted">In development - no users yet.</p>' : `
           <div class="spread small"><span>Users</span><b>${abbrev(p.users)} / ${abbrev(cap)} market</b></div>
           ${bar(p.users / Math.max(cap, 1), 'good', 'market penetration')}
           <div class="spread small"><span>Paying customers</span><b>${abbrev(cust)}</b></div>
           <div class="spread small"><span>Revenue</span><b>${money(p.revenueDay)}/day</b></div>
+          ${cat.billable ? `<div class="spread small"><span>Delivery capacity</span><b>${money(p.deliveryCap || 0)}/day</b></div>
+          <div class="small muted">${(p.deliveryCap || 0) <= p.revenueDay + 1 ? 'Every hour is billed: more engineers, product or support people means more revenue.' : 'Capacity to spare: sales and reputation bring in more clients.'}</div>` : ''}
           <div class="spread small"><span>Churn</span><b>${(p.churnDay * 100).toFixed(2)}%/day</b></div>
           <div class="spread small"><span>Net growth</span><b class="${p.growthDay >= 0 ? 'up' : 'down'}">${p.growthDay >= 0 ? '+' : ''}${abbrev(p.growthDay)}/day</b></div>
           <div class="small muted">Mix: ${CUSTOMER_CLASSES.filter((k) => mix[k] > 0.01).map((k) => `${k} ${Math.round(mix[k] * 100)}%`).join(' · ')}</div>`}
@@ -262,17 +286,23 @@ export function products(ctx) {
             ${[['0.5', 'Low'], ['1', 'Normal'], ['2', 'High']].map(([v, l]) =>
               `<button class="ghost" data-act="priority" data-id="${p.id}" data-val="${v}"${String(p.priority) === v ? ' aria-current="true" style="color:var(--accent);border-color:var(--accent)"' : ''}>${l}</button>`).join('')}
           </span></div>
+        <div class="spread small" style="margin-top:6px"><span title="Applies to work queued from now on">Approach</span>
+          <span class="row">${APPROACHES.map((a) => `<button class="ghost" data-act="approach" data-id="${p.id}|${a.id}" title="${esc(a.desc)}"${p.approach === a.id ? ' aria-current="true" style="color:var(--accent);border-color:var(--accent)"' : ''}>${a.name}</button>`).join('')}</span></div>
+        <div class="small muted">${esc(approachById(p.approach).desc)}</div>
+        ${(p.launches || []).length ? `<div class="small" style="margin-top:6px">Launches: ${p.launches.slice(0, 4).map((l) => `<span class="tag launch-${l.outcome}" title="${esc(l.name)} · day ${l.day}${l.lead ? ` · led by ${esc(l.lead)}` : ''}">${esc(l.outcome)}</span>`).join('')}</div>` : ''}
+        ${p.stage === 'live' ? `<div class="small muted">Next major version (v${Math.floor(p.version) + 1}): ${Math.min(featuresForMajor(p), p.featuresSinceMajor || 0)}/${featuresForMajor(p)} feature updates</div>` : ''}
         ${roadmapBlock(ctx, p, wf)}
         <h3 style="margin-top:10px">Work queue</h3>
-        ${cur ? `<div class="spread small"><span>${esc(cur.name)}</span><span>${Math.round((cur.done / cur.work) * 100)}%</span></div>${bar(cur.done / cur.work)}` : '<p class="muted small">Idle. Queue something below, or hire an engineering manager to keep it busy.</p>'}
+        ${cur ? `<div class="spread small"><span>${esc(cur.name)}${cur.approach && cur.approach !== 'standard' ? ` <span class="tag">${esc(approachById(cur.approach).name)}</span>` : ''}</span><span>${Math.round((cur.done / cur.work) * 100)}%</span></div>${bar(cur.done / cur.work)}` : '<p class="muted small">Idle. Queue something below, or hire an engineering manager to keep it busy.</p>'}
         ${p.projects.slice(1).map((q) => `<div class="small muted">queued: ${esc(q.name)}</div>`).join('')}
         <div class="row" style="margin-top:8px">
           ${avail.map((t) => btn('queue', `${t.name}${rec && rec.id === t.id ? ' ★' : ''}`, {
             id: `${p.id}|${t.id}`, cls: 'btn secondary',
             disabled: p.projects.length >= 4,
-            title: `${t.desc} (~${Math.round(cat.mvpWork * t.workMul * (1 + p.completed.length * 0.09))} work)`
+            title: `${t.desc} (~${Math.round(cat.mvpWork * t.workMul * (1 + p.completed.length * 0.09) * approachById(p.approach).work)} work)`
           })).join('')}
         </div>
+        ${p.stage === 'live' && state.products.length > 1 ? `<div class="row" style="margin-top:8px">${btn('sell-product', `Sell this product line for ${money(productSalePrice(state, p))}`, { id: p.id, cls: 'btn secondary', title: 'Cash now and a free product slot. The customers go with it; the team stays.' })}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -282,6 +312,7 @@ export function products(ctx) {
       <div class="tile">
         <h3>${esc(c.name)}<span class="tag">${money(c.cost)}</span></h3>
         <p>${esc(c.blurb)}</p>
+        ${c.strategy ? `<p class="small" style="color:var(--info)">${esc(c.strategy)}</p>` : ''}
         <div class="small muted">Market ${abbrev(c.marketBase)} · churn ${(c.churn * 100).toFixed(1)}%/day · infra ${c.infraLoad}/1k users · enterprise ${pct(c.enterprisePotential)}</div>
         ${btn('new-product', c.available ? `Start ${c.name}` : c.reason || 'Unavailable', { id: c.id, disabled: !c.available })}
       </div>`).join('')}</div><hr />` : `<p class="muted small">Product slots full (${state.products.length}/${slots}). Reaching the next company stage opens another.</p><hr />`;
@@ -290,36 +321,43 @@ export function products(ctx) {
 }
 
 // -------------------------------------------------------------- Employees
+function paceBlock(state) {
+  return `<div class="tile"><h3>Work pace</h3>
+    <div class="row">${PACES.map((p) => `<button class="choice${state.company.pace === p.id ? ' on' : ''}" data-act="pace" data-id="${p.id}" style="flex:1;min-width:140px${state.company.pace === p.id ? ';border-color:var(--accent)' : ''}">
+      <b>${esc(p.name)}${state.company.pace === p.id ? ' ✔' : ''}</b>${esc(p.desc)}</button>`).join('')}</div>
+  </div>`;
+}
+
 export function employees(ctx) {
   const { state, mods } = ctx;
   const wf = computeWorkforce(state, mods);
   const { capacity } = deskPressure(state, mods);
+  const tired = state.employees.filter((e) => isBurntOut(e) && !onLeave(state, e)).length;
+  const avgEnergy = state.employees.reduce((a, e) => a + (e.energy ?? 0.9), 0) / Math.max(1, state.employees.length);
 
   const cands = state.candidates.length ? state.candidates.map((c) => {
     const role = roleById(c.role);
     return `<tr>
       <td>${esc(c.name)}${c.star ? ' <span class="tag" style="color:var(--accent)">star</span>' : ''}</td>
-      <td>${esc(role.name)}</td>
+      <td>${esc(jobTitle(c.skill, role.name))}</td>
       <td class="num">${c.skill.toFixed(1)}</td>
-      <td class="num">${c.productivity.toFixed(2)}</td>
       <td class="num">${money(c.salary, 0)}/yr</td>
       <td class="num">${c.signingBonus ? money(c.signingBonus, 0) : '-'}</td>
-      <td>${esc(c.specialty ? c.specialty : '-')}</td>
+      <td>${traitTags(c)}${c.specialty ? `<span class="tag">${esc(c.specialty)}</span>` : ''}${!c.traits?.length && !c.specialty ? '<span class="muted">-</span>' : ''}</td>
       <td>${btn('hire', 'Hire', { id: c.id, cls: 'btn', disabled: state.employees.length >= capacity || state.company.cash < c.signingBonus })}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="8" class="muted">No candidates right now. More arrive every few days.</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="muted">No candidates right now. More arrive every few days.</td></tr>';
 
   const roster = state.employees.slice().sort((a, b) => b.skill - a.skill).map((e) => {
     const role = roleById(e.role);
     return `<tr>
       <td><button class="ghost" data-act="employee" data-id="${e.id}" style="padding:2px 6px">${esc(e.name)}</button></td>
-      <td>${esc(role.name)}</td>
+      <td>${esc(jobTitle(e.skill, role.name, e.id === 'founder'))}</td>
       <td>${esc(departmentById(e.dept)?.name || e.dept)}</td>
       <td class="num">${e.skill.toFixed(1)}</td>
-      <td class="num">${e.productivity.toFixed(2)}</td>
-      <td class="num">${e.salary ? money(e.salary, 0) : '-'}</td>
-      <td style="min-width:70px">${bar(e.morale, e.morale > 0.6 ? 'good' : e.morale > 0.4 ? 'warn' : 'bad', `${e.name} morale`)}</td>
-      <td>${e.isManager ? '<span class="tag">manager</span>' : ''}${e.specialty ? `<span class="tag">${esc(e.specialty)}</span>` : ''}</td>
+      <td style="min-width:60px">${energyBar(e)}</td>
+      <td style="min-width:60px">${bar(e.morale, e.morale > 0.6 ? 'good' : e.morale > 0.4 ? 'warn' : 'bad', `${e.name} morale`)}</td>
+      <td>${statusTags(state, e)}${e.isManager ? '<span class="tag">manager</span>' : ''}${traitTags(e)}${e.specialty ? `<span class="tag">${esc(e.specialty)}</span>` : ''}</td>
     </tr>`;
   }).join('');
 
@@ -328,40 +366,51 @@ export function employees(ctx) {
       <div class="tile"><h3>Headcount</h3>
         <div class="spread"><span>${state.employees.length} / ${capacity} desks</span><b>${money(wf.payrollDay)}/day</b></div>
         ${bar(state.employees.length / Math.max(capacity, 1), state.employees.length > capacity ? 'bad' : 'good', 'desk usage')}
-        <p class="muted small">${state.employees.length > capacity ? 'Overcrowded: morale and output are suffering.' : 'Everyone has somewhere to sit.'}</p>
+        <p class="muted small">${state.employees.length > capacity ? 'Overcrowded: morale, energy and output are suffering.' : 'Everyone has somewhere to sit.'}</p>
+        <div class="spread small"><span>Average energy</span><b>${pct(avgEnergy)}</b></div>
+        ${bar(avgEnergy, avgEnergy > 0.5 ? 'good' : 'warn', 'average energy')}
+        ${tired ? `<p class="small" style="color:var(--bad)">${tired} burnt out: they work at a fraction of their pace and may quit.</p>` : ''}
       </div>
       <div class="tile"><h3>Output per day</h3>
         ${['eng', 'product', 'design', 'sales', 'marketing', 'support', 'infra'].map((k) =>
           `<div class="spread small"><span>${k}</span><b>${wf.out[k].toFixed(1)}</b></div>`).join('')}
       </div>
     </div>
+    ${paceBlock(state)}
     <hr />
     <h3>Candidates</h3>
-    <table><thead><tr><th>Name</th><th>Role</th><th class="num">Skill</th><th class="num">Prod</th><th class="num">Salary</th><th class="num">Bonus</th><th>Specialty</th><th></th></tr></thead>
+    <p class="muted small">Traits: <span style="color:${RARITIES.common.color}">common</span> ·
+      <span style="color:${RARITIES.rare.color}">◆ rare</span> · <span style="color:${RARITIES.legendary.color}">★ legendary</span>. Hover a trait for what it does.</p>
+    <table><thead><tr><th>Name</th><th>Role</th><th class="num">Skill</th><th class="num">Salary</th><th class="num">Bonus</th><th>Traits</th><th></th></tr></thead>
     <tbody>${cands}</tbody></table>
     <hr />
     <h3>Team</h3>
-    <table><thead><tr><th>Name</th><th>Role</th><th>Department</th><th class="num">Skill</th><th class="num">Prod</th><th class="num">Salary</th><th>Morale</th><th></th></tr></thead>
-    <tbody>${roster}</tbody></table>`;
+    <table><thead><tr><th>Name</th><th>Title</th><th>Department</th><th class="num">Skill</th><th>Energy</th><th>Morale</th><th></th></tr></thead>
+    <tbody>${roster}</tbody></table>
+    ${(state.alumni || []).length ? `<hr /><h3>Alumni</h3><p class="small muted">${state.alumni.slice(0, 10).map((a) => `${esc(a.name)} (${esc(roleById(a.role)?.name || a.role)}, ${esc(a.why)} day ${a.day})`).join(' · ')}</p>` : ''}`;
 }
 
 export function employeeCard(ctx, id) {
-  const { state } = ctx;
+  const { state, mods } = ctx;
   const e = state.employees.find((x) => x.id === id);
   if (!e) return '<p>That person has left the company.</p>';
   const role = roleById(e.role);
-  const under = e.salary > 0 && e.salary < marketSalary(e.role, e.skill) * 0.92;
+  const under = e.salary > 0 && e.salary < fairSalary(e) * 0.92;
+  const traits = traitList(e);
+  const story = (e.story || []).slice().reverse();
   return `
     <h2>${esc(e.name)}</h2>
-    <p class="muted">${esc(role.name)} · ${esc(departmentById(e.dept)?.name || e.dept)}${e.specialty ? ` · ${esc(e.specialty)}` : ''}</p>
+    <p class="muted">${esc(jobTitle(e.skill, role.name, e.id === 'founder'))} · ${esc(departmentById(e.dept)?.name || e.dept)}${e.specialty ? ` · ${esc(e.specialty)}` : ''} ${statusTags(state, e)}</p>
     <p class="small">${esc(role.blurb)}</p>
+    ${traits.length ? `<div class="trait-list">${traits.map((t) => `<div class="small">${traitTag(t)} ${esc(t.desc)}</div>`).join('')}</div>` : ''}
     <div class="spread small"><span>Skill</span><b>${e.skill.toFixed(1)} / 12</b></div>${bar(e.skill / 12)}
-    <div class="spread small"><span>Productivity</span><b>${e.productivity.toFixed(2)}x</b></div>${bar(e.productivity / 1.5)}
+    <div class="spread small"><span>Energy</span><b>${pct(e.energy ?? 0.9)} → ${pct(energyTarget(state, mods, e))}</b></div>${energyBar(e)}
     <div class="spread small"><span>Morale</span><b>${pct(e.morale)}</b></div>${bar(e.morale, e.morale > 0.6 ? 'good' : 'warn')}
     <div class="spread small"><span>Salary</span><b>${e.salary ? `${money(e.salary, 0)}/yr` : 'none (founder)'}</b></div>
     ${under ? '<p class="small" style="color:var(--warn)">Paid below market. They are a flight risk.</p>' : ''}
-    <div class="spread small"><span>Experience</span><b>${e.experience.toFixed(1)}</b></div>
+    <div class="spread small"><span>Projects led</span><b>${e.shipped || 0}</b></div>
     <div class="spread small"><span>Current work</span><b>${esc(currentTask(state, e))}</b></div>
+    ${story.length ? `<h3 style="margin-top:10px">Story</h3><ul class="story small">${story.map((s) => `<li><span class="muted">day ${s.day}</span> ${esc(s.text)}</li>`).join('')}</ul>` : ''}
     <hr />
     <div class="row">
       <label class="small">Department
@@ -372,7 +421,8 @@ export function employeeCard(ctx, id) {
     </div>
     <div class="row" style="margin-top:10px">
       ${btn('promote', 'Promote', { id: e.id, cls: 'btn secondary' })}
-      ${btn('give-raise', 'Give a 10% raise', { id: e.id, cls: 'btn secondary' })}
+      ${e.id === 'founder' ? '' : btn('give-raise', 'Give a 10% raise', { id: e.id, cls: 'btn secondary' })}
+      ${btn('leave', onLeave(state, e) ? 'On leave' : 'Send on 5-day leave', { id: e.id, cls: 'btn secondary', disabled: onLeave(state, e), title: 'No output while away; comes back fully rested.' })}
       ${e.id === 'founder' ? '' : btn('fire', 'Let go', { id: e.id, cls: 'btn danger' })}
       ${btn('close-overlay', 'Close', { cls: 'btn secondary' })}
     </div>`;
@@ -395,7 +445,13 @@ export function departments(ctx) {
   const order = stageOrder(state.company.stage);
   const managers = state.employees.filter((e) => e.isManager);
 
-  return `<p class="muted small">Priorities change what a department spends its effort on. Managers unlock automation: an engineering manager keeps the top product's queue full on its own, and the Delivery Playbooks research extends that to every product.</p>
+  const perks = deptPerks(state);
+  const syn = activeSynergies(state);
+  const counts = deptCounts(state);
+  return `<p class="muted small">Priorities change what a department spends its effort on. Departments grow into named capabilities as they gain people; the bigger ones need a manager. Managers also unlock automation: an engineering manager keeps the top product's queue full on its own.</p>
+  <div class="tile"><h3>Synergies<span class="tag">${syn.filter((x) => x.active).length}/${syn.length} active</span></h3>
+    ${syn.map((x) => `<div class="spread small"><span style="color:var(--${x.active ? 'good' : 'dim'})">${x.active ? '✔' : '·'} <b>${esc(x.name)}</b> — ${esc(x.desc)}</span><span>${effectRow(x.mods)}</span></div>`).join('')}
+  </div>
   <div class="grid two">${DEPARTMENTS.map((d) => {
     const locked = order < stageOrder(d.unlock);
     const dept = state.departments[d.id];
@@ -408,6 +464,8 @@ export function departments(ctx) {
         <p>${esc(d.blurb)}</p>
         <div class="spread small"><span>Output</span><b>${Object.entries(wf.byDept[d.id]).filter(([, v]) => v > 0.05).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ') || 'none'}</b></div>
         <div class="spread small"><span>Manager</span><b>${mgr ? esc(mgr.name) : 'none'}</b></div>
+        <div class="perks">${perks.filter((p) => p.dept === d.id).map((p) => `<div class="small perk ${p.active ? 'on' : ''}" title="${esc(p.desc)}">
+          ${p.active ? '✔' : `${Math.min(p.have, p.size)}/${p.size}`} <b>${esc(p.name)}</b>${p.manager ? ' <span class="muted">(needs manager)</span>' : ''} ${effectRow(p.mods)}</div>`).join('')}</div>
         <label class="small">Assign manager
           <select data-act="set-manager" data-id="${d.id}">
             <option value="">- none -</option>
@@ -436,9 +494,10 @@ export function research(ctx) {
     const items = RESEARCH.filter((r) => r.cat === cat.id).map((r) => {
       const s = researchStatus(state, mods, r.id);
       const done = s.state === 'done';
-      return `<div class="tile" style="${done ? 'opacity:.6' : ''}">
-        <h3>${esc(r.name)}<span class="tag">${done ? 'done' : money(r.cost)}</span></h3>
+      return `<div class="tile" style="${done ? (r.exclusive ? 'border-color:var(--accent)' : 'opacity:.6') : s.excluded ? 'opacity:.4' : ''}">
+        <h3>${esc(r.name)}<span class="tag">${done ? 'done' : money(r.cost)}</span>${r.exclusive ? `<span class="tag" style="color:var(--accent)">${esc(DOCTRINES[r.exclusive])}</span>` : ''}</h3>
         <p>${esc(r.desc)}</p>
+        ${Object.keys(r.mods || {}).length ? `<div class="small">${effectRow(r.mods)}</div>` : ''}
         <div class="small muted">${fmtDuration(r.days)} of research${r.req.length ? ` · after ${r.req.map((q) => researchById(q).name).join(', ')}` : ''}</div>
         ${done ? '' : btn('research', s.state === 'available' ? 'Start research' : (s.reason || labelState(s.state)), { id: r.id, disabled: s.state !== 'available', cls: 'btn secondary' })}
       </div>`;
@@ -471,8 +530,10 @@ export function finance(ctx) {
     ['Rent', -st.rentDay, 'down'],
     ['Advisors', -(st.advisorDay || 0), 'down'],
     ['Roadmap work', -(st.roadmapDay || 0), 'down'],
-    ['Tools & overhead', -(st.miscDay || 0), 'down']
-  ];
+    ['Tools & overhead', -(st.miscDay || 0), 'down'],
+    ['Loan repayment', -(st.loanDay || 0), 'down'],
+    ['Interest on cash', st.interestDay || 0, 'up']
+  ].filter(([l, v]) => !['Loan repayment', 'Interest on cash'].includes(l) || v !== 0);
 
   return `
     <div class="grid two">
@@ -518,17 +579,50 @@ export function finance(ctx) {
     <hr />
     <h3>Funding</h3>
     <p class="muted small">You own ${pct(state.company.founderEquity, 1)}. Every round dilutes that, and your exit pays out on what is left. Bootstrapping all the way is a real strategy.</p>
-    <div class="grid two">${offers.map((o) => `
-      <div class="tile">
-        <h3>${esc(o.name)}<span class="tag">${pct(o.equity)} equity</span></h3>
+    ${fundingStatus(state)}
+    <div class="grid two">${offers.map((o) => {
+      const taken = state.funding.rounds.find((r) => r.id === o.id);
+      return `
+      <div class="tile" style="${taken && !o.available ? 'opacity:.6' : ''}">
+        <h3>${esc(o.name)}<span class="tag">${taken && !o.available ? `raised ${money(taken.cash)}` : `${pct(o.equity)} equity`}</span></h3>
         <p>${esc(o.blurb)}</p>
-        <div class="spread small"><span>Investor valuation</span><b>${money(o.valuation)}</b></div>
-        <div class="spread small"><span>You receive</span><b>${money(o.cash)}</b></div>
-        ${btn('raise', o.available ? `Raise ${o.name}` : o.reason || 'Unavailable', { id: o.id, disabled: !o.available })}
-      </div>`).join('')}</div>
+        ${o.available ? o.terms.map((t) => `
+          <button class="choice" data-act="raise" data-id="${o.id}|${t.investor}">
+            <b>${esc(t.name)}: ${money(t.cash)} for ${pct(t.equity, 1)}</b>
+            <span class="small">valuation ${money(t.valuation)} · ${esc(t.blurb)}</span>
+            ${t.target ? `<span class="small" style="color:var(--warn);display:block">Board target: revenue ${money(Math.max(state.stats.revenueDay, 50) * t.target.revenueMul)}/day within ${t.target.days} days, or the board forces cuts.</span>` : ''}
+            ${t.perk ? `<span class="small" style="display:block">${effectRow(t.perk)} ${Object.entries(t.exitMod || {}).map(([k, v]) => `<span class="tag">${k} exit ${v > 0 ? '+' : ''}${Math.round(v * 100)}%</span>`).join(' ')}</span>` : ''}
+          </button>`).join('') + `<button class="choice" data-act="pitch" data-id="${o.id}|lead"><b>Pitch the lead investor yourself ▶</b>
+            <span class="small">Three questions about your real numbers. A strong pitch raises the price by up to 15%.</span></button>` : `<div class="spread small"><span>Investor valuation</span><b>${money(o.valuation)}</b></div>
+          ${taken ? '' : `<p class="small muted">${esc(o.reason || 'Unavailable')}</p>`}`}
+      </div>`;
+    }).join('')}</div>
     <hr />
     <h3>History</h3>
     ${sparkline(state.stats.history)}`;
+}
+
+function fundingStatus(state) {
+  const f = state.funding;
+  const loan = loanOffer(state);
+  const targets = (f.targets || []).filter((t) => t.status === 'open');
+  const done = (f.targets || []).filter((t) => t.status !== 'open');
+  const active = (f.loans || [])[0];
+  return `<div class="grid two">
+    <div class="tile"><h3>Board</h3>
+      ${targets.length ? targets.map((t) => `<div class="spread small"><span>Revenue target (${esc(t.round.replace(/_/g, ' '))})</span><b>${money(state.stats.revenueDay)} / ${money(t.goal)}</b></div>
+        ${bar(Math.min(1, (state.stats.revenueDay - t.from) / Math.max(1, t.goal - t.from)), 'warn')}
+        <div class="small muted">${fmtDuration(Math.max(0, t.deadline - state.time.day))} left before the board acts.</div>`).join('')
+        : '<p class="small muted">No growth targets. A top-tier VC round comes with one.</p>'}
+      ${done.length ? `<p class="small">${done.map((t) => `<span class="tag" style="color:var(--${t.status === 'hit' ? 'good' : 'bad'})">${esc(t.round.replace(/_/g, ' '))} target ${t.status}</span>`).join(' ')}</p>` : ''}
+      ${Object.keys(f.exitMods || {}).length ? `<p class="small">Exit terms: ${Object.entries(f.exitMods).map(([k, v]) => `${esc(k)} ${v > 0 ? '+' : ''}${Math.round(v * 100)}%`).join(' · ')}</p>` : ''}
+    </div>
+    <div class="tile"><h3>Revenue-based loan</h3>
+      <p class="small muted">Cash now, repaid as ${Math.round(loan.share * 100)}% of revenue until ${Math.round((loan.repay / Math.max(1, loan.principal)) * 100)}% is paid back. No equity, no board.</p>
+      ${active ? `<div class="spread small"><span>Still owed</span><b>${money(active.owed)}</b></div>${bar(1 - active.owed / Math.max(1, active.principal * 1.35), 'good', 'loan repaid')}`
+        : btn('loan', loan.available ? `Borrow ${money(loan.principal)} (repay ${money(loan.repay)})` : loan.reason, { disabled: !loan.available })}
+    </div>
+  </div>`;
 }
 
 function sparkline(history) {
@@ -563,35 +657,81 @@ export function office(ctx) {
         ${t.owned ? '' : btn('office', t.available ? `Move in (${money(t.cost)})` : t.reason || 'Unavailable', { id: t.id, disabled: !t.available })}
       </div>`).join('')}</div>
     <hr />
-    <h3>Rooms</h3>
-    <p class="muted small">Rooms are permanent for this run and appear in the office view immediately.</p>
+    <h3>Rooms<span class="tag">${state.office.rooms.length}/${roomSlots(state.office.tier)} slots</span><span class="tag">upkeep ${money(roomUpkeep(state))}/day</span></h3>
+    <p class="muted small">Each office only fits so many rooms, and every room costs upkeep. Rooms appear in the office view immediately, and people use the ones that fit their job. Knocking one down frees its slot; nothing is refunded.</p>
     <div class="grid two">${rooms.map((r) => `
-      <div class="tile" style="${r.owned ? 'opacity:.6' : ''}">
+      <div class="tile" style="${r.owned ? 'border-color:var(--good)' : ''}">
         <h3>${esc(r.name)}<span class="tag">${r.owned ? 'built' : money(r.cost)}</span></h3>
         <p>${esc(r.blurb)}</p>
-        <div class="small muted">${Object.entries(r.effect).map(([k, v]) => `${k} ${typeof v === 'number' && Math.abs(v) < 1 ? (v > 0 ? '+' : '') + Math.round(v * 100) + '%' : '+' + v}`).join(' · ')}</div>
-        ${r.owned ? '' : btn('room', r.available ? 'Build' : r.reason || 'Unavailable', { id: r.id, disabled: !r.available })}
+        <div class="small">${effectRow(Object.fromEntries(Object.entries(r.effect).filter(([k]) => k !== 'capacity')))}${r.effect.capacity ? ` <span class="tag">+${r.effect.capacity} server capacity</span>` : ''}</div>
+        <div class="small muted">Upkeep ${money(r.upkeep || 0)}/day</div>
+        ${r.owned ? btn('room-remove', 'Knock it down', { id: r.id, cls: 'btn secondary' }) : btn('room', r.available ? 'Build' : r.reason || 'Unavailable', { id: r.id, disabled: !r.available })}
       </div>`).join('')}</div>`;
 }
 
 // ------------------------------------------------------------ Competitors
+function marketBlock(state) {
+  const m = ensureMarket(state);
+  const econ = economyNow(state);
+  const trends = (m.trends || []).filter((t) => t.until > state.time.day).map((t) => ({ ...trendDefById(t.id), ...t }));
+  const early = state.time.day < 18;
+  return `<div class="grid two">
+    <div class="tile"><h3>Economy<span class="tag" style="color:${econ.color};border-color:${econ.color}">${esc(econ.name)}</span></h3>
+      <p>${esc(econ.blurb)}</p>
+      ${early ? '<p class="small muted">The wider economy starts moving once you are past your first few weeks.</p>'
+        : `<div class="small muted">Expected to last about ${fmtDuration(Math.max(0, m.until - state.time.day))} more.</div>`}
+      <div class="small" style="margin-top:4px">${effectRow(econ.mods)}</div>
+    </div>
+    <div class="tile"><h3>Trends</h3>
+      ${trends.length ? trends.map((t) => `<div style="margin-bottom:6px"><div class="spread small"><b style="color:var(--${t.negative ? 'bad' : 'good'})">${t.negative ? '▼' : '▲'} ${esc(t.name)}</b><span>${esc(categoryById(t.cat)?.name || t.cat)} · ${fmtDuration(t.until - state.time.day)}</span></div>
+        <div class="small muted">${esc(t.blurb)}</div>
+        <div class="small">market ${t.marketSize > 0 ? '+' : ''}${Math.round(t.marketSize * 100)}% · launches ${t.launch > 0 ? '+' : ''}${Math.round(t.launch * 100)} · investors ${t.funding > 0 ? '+' : ''}${Math.round(t.funding * 100)}%</div></div>`).join('')
+        : '<p class="muted small">No strong trend right now. Waves form in one category at a time: ride a rising one, avoid a falling one.</p>'}
+    </div>
+  </div>`;
+}
+
 export function competitors(ctx) {
   const { state, mods } = ctx;
   const canBuy = has(mods, 'acquisitions');
   const targets = acquisitionTargets(state);
   const offers = acquisitionOffers(state);
   const buying = integrationActive(state);
+  const rs = state.rivalState || {};
+  const board = leaderboard(state);
+  const myRank = board.findIndex((r) => r.you) + 1;
+  const wars = (rs.wars || []).filter((w) => w.until > state.time.day);
+  const rivalCard = (c) => {
+    const t = targets.find((x) => x.id === c.id);
+    const pers = PERSONALITIES[c.personality] || {};
+    const isNem = rs.nemesis === c.id;
+    const status = c.acquiredBy === 'player' ? 'acquired by you' : c.acquired ? `acquired by ${esc(state.competitors.find((x) => x.id === c.acquiredBy)?.name || 'a rival')}` : c.alive ? moneyTag(c.valuation) : 'shut down';
+    return `<div class="tile" style="${c.alive ? '' : 'opacity:.5'}${isNem ? ';border-color:var(--bad)' : ''}">
+      <h3>${esc(c.name)}${isNem ? '<span class="tag" style="color:var(--bad);border-color:var(--bad)">nemesis</span>' : ''}<span class="tag">${status}</span></h3>
+      <p>${esc(c.blurb)}</p>
+      ${c.alive ? `<div class="small"><b>${esc(pers.name || '')}</b> <span class="muted">— ${esc(pers.blurb || '')}</span></div>
+      <div class="spread small"><span>Headcount</span><b>~${abbrev(c.headcount || 0)}</b></div>
+      <div class="spread small"><span>Strength</span><b>${c.strength.toFixed(2)}</b></div>
+      <div class="spread small"><span>Rivalry with you</span><b>${pct(c.rivalry || 0)}</b></div>${bar(c.rivalry || 0, 'bad')}
+      <div class="small muted">Markets: ${c.markets.map((m) => `${esc(categoryById(m)?.name || m)} ${Math.round((c.shares[m] || 0) * 100)}%`).join(' · ')}</div>
+      ${(c.products || []).length ? `<div class="small muted">Products: ${c.products.slice(0, 4).map((p) => esc(p.name)).join(', ')}</div>` : ''}
+      ${(c.news || []).length ? `<ul class="story small">${c.news.slice(0, 3).map((n) => `<li><span class="muted">day ${n.day}</span> ${esc(n.text)}</li>`).join('')}</ul>` : ''}` : ''}
+      ${t && canBuy ? btn('acquire', `Acquire for ${money(t.price)}`, { id: c.id, disabled: state.company.cash < t.price }) : ''}
+    </div>`;
+  };
+  const alive = state.competitors.filter((c) => c.alive);
+  const gone = state.competitors.filter((c) => !c.alive);
   return `
-    <p class="muted small">Rivals take share out of the markets your products sell into. Beating them on revenue slowly pushes them back; buying them removes the pressure outright.</p>
-    <div class="grid two">${state.competitors.map((c) => {
-      const t = targets.find((x) => x.id === c.id);
-      return `<div class="tile" style="${c.alive ? '' : 'opacity:.5'}">
-        <h3>${esc(c.name)}<span class="tag">${c.acquired ? 'acquired by you' : c.alive ? `strength ${c.strength.toFixed(2)}` : 'shut down'}</span></h3>
-        <p>${esc(c.blurb)}</p>
-        <div class="small muted">Markets: ${c.markets.map((m) => `${categoryById(m)?.name || m} ${Math.round((c.shares[m] || 0) * 100)}%`).join(' · ')}</div>
-        ${t && canBuy ? btn('acquire', `Acquire for ${money(t.price)}`, { id: c.id, disabled: state.company.cash < t.price }) : ''}
-      </div>`;
-    }).join('')}</div>
+    ${marketBlock(state)}
+    <hr />
+    <h3>Leaderboard<span class="tag">you are #${myRank} of ${board.length}</span></h3>
+    <table><tbody>${board.map((r, i) => `<tr${r.you ? ' style="color:var(--accent)"' : ''}><td class="num">${i + 1}</td><td>${esc(r.name)}${r.you ? ' (you)' : ''}${rs.nemesis === r.id ? ' <span class="tag" style="color:var(--bad)">nemesis</span>' : ''}</td><td class="num">${money(r.valuation)}</td></tr>`).join('')}</tbody></table>
+    ${wars.length ? `<p class="small" style="color:var(--bad)">Price war: ${wars.map((w) => `${esc(state.competitors.find((c) => c.id === w.rival)?.name || '')} in ${esc(categoryById(w.cat)?.name || w.cat)} (+${Math.round(w.churn * 100)}% churn, ${fmtDuration(w.until - state.time.day)})`).join(' · ')}</p>` : ''}
+    <hr />
+    <h3>Rivals</h3>
+    <p class="muted small">Rivals take share out of the markets your products sell into, and each one plays its own way. Beating them on revenue slowly pushes them back; buying them removes the pressure outright.</p>
+    <div class="grid two">${alive.map(rivalCard).join('')}</div>
+    ${gone.length ? `<p class="small muted" style="margin-top:8px">Gone: ${gone.map((c) => `${esc(c.name)} (${c.acquiredBy === 'player' ? 'bought by you' : c.acquired ? 'acquired' : 'shut down'})`).join(' · ')}</p>` : ''}
     <hr />
     <h3>Companies for sale${buying ? '<span class="tag">integrating</span>' : ''}</h3>
     ${offers.length ? `
@@ -619,9 +759,10 @@ export function competitors(ctx) {
     ${[...new Set(state.products.map((p) => p.category))].map((cat) => {
       const shares = marketShares(state, cat);
       const total = shares.reduce((a, s) => a + s.share, 0);
-      return `<div class="spread small"><span>${esc(categoryById(cat).name)}</span><b>you hold ${pct(Math.max(0, 1 - total))}</b></div>${bar(Math.max(0, 1 - total), 'good')}`;
+      return `<div class="spread small"><span>${esc(categoryById(cat).name)}</span><b>rivals hold ${pct(total)}${shares.length ? ` (${shares.map((x) => `${esc(x.name)} ${pct(x.share)}`).join(', ')})` : ''}</b></div>${bar(Math.max(0, 1 - total), 'good')}`;
     }).join('')}`;
 }
+const moneyTag = (v) => money(v);
 
 // ---------------------------------------------------------------- Prestige
 export function prestige(ctx) {
@@ -738,4 +879,96 @@ function fmtGoal(def, p) {
   return `${Math.floor(p.have)} / ${p.need}`;
 }
 
-export const PANELS = { company, products, employees, departments, research, finance, office, competitors, advisors, goals };
+// ------------------------------------------------------------------ Legacy
+export function legacy(ctx) {
+  const { state } = ctx;
+  const meta = state.meta;
+  const r = meta.records || {};
+  const earned = new Set(meta.achievements || []);
+  const bgs = backgroundOptions(meta);
+  const bg = backgroundById(state.background);
+  const cats = startCategoriesFor(meta);
+  const nextCats = START_UNLOCKS.find((u) => u.exits > (meta.runs || []).length);
+  return `
+    <div class="grid two">
+      <div class="tile"><h3>Founder Reputation<span class="tag" style="color:var(--accent)">${Math.floor(meta.founderRep)} FR</span></h3>
+        <div class="spread small"><span>Earned in total</span><b>${Math.floor(meta.lifetimeRep)} FR</b></div>
+        <div class="spread small"><span>Companies finished</span><b>${(meta.runs || []).length}</b></div>
+        <div class="spread small"><span>Achievements</span><b>${earned.size} / ${ACHIEVEMENTS.length}</b></div>
+        ${btn('open-prestige', 'Spend on founder upgrades', { cls: 'btn' })}
+      </div>
+      <div class="tile"><h3>This company</h3>
+        <div class="spread small"><span>Founder background</span><b>${esc(bg.name)}</b></div>
+        <div class="small">${effectRow(bg.mods)}</div>
+        <div class="spread small"><span>Challenges</span><b>${(state.challenges || []).length ? state.challenges.map((c) => esc(challengeById(c)?.name || c)).join(', ') : 'none'}</b></div>
+        <div class="spread small"><span>Market</span><b>${esc((SCENARIOS.find((x) => x.id === state.scenarioId) || SCENARIOS[0]).name)}</b></div>
+      </div>
+    </div>
+    <hr />
+    <h3>Records</h3>
+    ${r.exits ? `<div class="grid two"><div class="tile">
+      <div class="spread small"><span>Best valuation at exit</span><b>${money(r.bestValuation || 0)}</b></div>
+      <div class="spread small"><span>Best proceeds</span><b>${money(r.bestProceeds || 0)}</b></div>
+      <div class="spread small"><span>Fastest exit</span><b>${r.fastestExit ?? '-'} days</b></div></div>
+      <div class="tile"><div class="spread small"><span>Largest team</span><b>${r.mostPeople || 0} people</b></div>
+      <div class="spread small"><span>Best revenue day</span><b>${money(r.bestRevenueDay || 0)}</b></div>
+      <div class="spread small"><span>Exits</span><b>${r.exits}</b></div></div></div>` : '<p class="muted small">Records start with your first exit.</p>'}
+    <hr />
+    <h3>Achievements<span class="tag">${earned.size}/${ACHIEVEMENTS.length}</span></h3>
+    <p class="muted small">The harder ones pay a little Founder Reputation, once ever. Some unlock founder backgrounds.</p>
+    <div class="ach-grid">${ACHIEVEMENTS.map((a) => `<div class="ach ${earned.has(a.id) ? 'on' : ''}" title="${esc(a.desc)}">
+      <b>${earned.has(a.id) ? '★' : '☆'} ${esc(a.name)}</b><span class="small">${esc(a.desc)}</span>${a.fr ? `<span class="tag">+${a.fr} FR</span>` : ''}</div>`).join('')}</div>
+    <hr />
+    <h3>Founder backgrounds</h3>
+    <p class="muted small">Chosen when you found a company. Every background has a cost; the stronger ones are earned.</p>
+    <div class="grid two">${bgs.map((b) => `<div class="tile" style="${b.unlocked ? '' : 'opacity:.55'}">
+      <h3>${esc(b.name)}${b.unlocked ? '' : '<span class="tag">locked</span>'}</h3><p class="small">${esc(b.desc)}</p>
+      <div class="small">${effectRow(b.mods)}${b.startCash ? ` <span class="tag">+${money(b.startCash)} start</span>` : ''}</div>
+      ${b.unlocked ? '' : `<p class="small muted">Unlock: ${esc(b.hint || '')}</p>`}</div>`).join('')}</div>
+    <hr />
+    <h3>Challenges</h3>
+    ${challengesUnlocked(meta) ? '' : '<p class="muted small">Challenges unlock after your first exit.</p>'}
+    <div class="grid two">${CHALLENGES.map((c) => `<div class="tile"><h3>${esc(c.name)}<span class="tag" style="color:var(--accent)">+${Math.round(c.frMul * 100)}% FR</span></h3><p class="small">${esc(c.desc)}</p></div>`).join('')}</div>
+    <hr />
+    <h3>Starting products</h3>
+    <p class="small">Available: ${cats.map((c) => esc(categoryById(c)?.name || c)).join(', ')}.</p>
+    ${nextCats ? `<p class="small muted">Finish ${nextCats.exits} compan${nextCats.exits === 1 ? 'y' : 'ies'} to start with ${nextCats.cats.map((c) => esc(categoryById(c)?.name || c)).join(' or ')}.</p>` : ''}
+    ${(meta.hallOfFame || []).length ? `<hr /><h3>Hall of fame</h3>
+      <p class="muted small">The best people from companies you sold.${metaEffects(meta).cofounder ? ' One of them co-founds each new company with you.' : ' The Loyal Co-Founder upgrade brings one of them into every new company.'}</p>
+      <table><tbody>${meta.hallOfFame.slice(0, 8).map((h) => `<tr><td>${esc(h.name)}</td><td>${esc(jobTitle(h.skill, roleById(h.role)?.name))}</td><td>${(h.traits || []).map((t) => traitById(t)).filter(Boolean).map(traitTag).join('')}</td><td class="small muted">${esc(h.company || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+    <hr />
+    <h3>Previous companies</h3>
+    ${(meta.runs || []).length ? `<table><thead><tr><th>Company</th><th>Exit</th><th class="num">Proceeds</th><th class="num">FR</th><th class="num">Days</th></tr></thead><tbody>
+      ${meta.runs.slice(0, 12).map((x) => `<tr><td>${esc(x.company)}</td><td>${esc(x.exit)}</td><td class="num">${money(x.proceeds)}</td><td class="num">${x.rep}</td><td class="num">${x.days}</td></tr>`).join('')}
+    </tbody></table>` : '<p class="muted small">None yet.</p>'}`;
+}
+
+/** The form for founding a new company: product, background, market, challenges. */
+export function foundCompanyForm(meta, { name = '', title = 'Found a company', note = '' } = {}) {
+  const cats = startCategoriesFor(meta);
+  const bgs = backgroundOptions(meta).filter((b) => b.unlocked);
+  const scen = SCENARIOS.filter((s) => (meta.runs || []).length >= s.unlockRuns);
+  const fx = metaEffects(meta);
+  return `<h2>${esc(title)}</h2>
+    ${note ? `<p class="muted small">${esc(note)}</p>` : ''}
+    <label class="small">Company name <input type="text" id="fc-name" value="${esc(name)}" /></label>
+    <h3 style="margin-top:10px">First product</h3>
+    <div class="fc-grid">${cats.map((c, i) => { const cat = categoryById(c); return `<label class="fc-opt"><input type="radio" name="fc-cat" value="${c}"${i === 0 ? ' checked' : ''} />
+      <b>${esc(cat.name)}</b><span class="small">${esc(cat.strategy || cat.blurb)}</span></label>`; }).join('')}</div>
+    <h3 style="margin-top:10px">Your background</h3>
+    <div class="fc-grid">${bgs.map((b, i) => `<label class="fc-opt"><input type="radio" name="fc-bg" value="${b.id}"${i === 0 ? ' checked' : ''} />
+      <b>${esc(b.name)}</b><span class="small">${esc(b.desc)}</span></label>`).join('')}</div>
+    <h3 style="margin-top:10px">Market</h3>
+    <select id="fc-scen">${scen.map((s) => `<option value="${s.id}">${esc(s.name)} — ${esc(s.desc)} (${s.repMul}x FR)</option>`).join('')}</select>
+    ${challengesUnlocked(meta) ? `<h3 style="margin-top:10px">Challenges <span class="muted small">(optional, more Founder Reputation)</span></h3>
+      <div class="fc-grid">${CHALLENGES.map((c) => `<label class="fc-opt"><input type="checkbox" name="fc-ch" value="${c.id}" />
+        <b>${esc(c.name)} <span style="color:var(--accent)">+${Math.round(c.frMul * 100)}%</span></b><span class="small">${esc(c.desc)}</span></label>`).join('')}</div>` : ''}
+    ${fx.cofounder && (meta.hallOfFame || []).length ? `<h3 style="margin-top:10px">Co-founder</h3>
+      <select id="fc-co">${meta.hallOfFame.slice(0, 8).map((h) => `<option value="${esc(h.name)}">${esc(h.name)} — ${esc(jobTitle(h.skill, roleById(h.role)?.name))}${(h.traits || []).length ? ` (${h.traits.map((t) => traitById(t)?.name || t).join(', ')})` : ''}</option>`).join('')}</select>` : ''}
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="fc-go">Found it</button>
+      <button class="btn secondary" data-act="close-overlay">Cancel</button>
+    </div>`;
+}
+
+export const PANELS = { company, products, employees, departments, research, finance, office, competitors, advisors, goals, legacy };

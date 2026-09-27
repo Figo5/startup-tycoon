@@ -69,6 +69,9 @@ function postPrestige() {
     'cloud_credits', 'deal_flow', 'warm_intros', 'exit_multiple', 'office_lease'];
   for (const profileName of ['moderate', 'active']) {
     const first = run(11, profileName, horizon, { checkpoints: [], systems: true });
+    // The operator only marks the exit it would take; take it, so the founder
+    // actually banks the reputation for run 2.
+    if (first.marks.exit) performExit(first.state, computeMods(first.state), first.marks.exit.id);
     const meta = first.state.meta;
     let spent = 0;
     let buys = 0;

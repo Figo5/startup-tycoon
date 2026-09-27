@@ -4,6 +4,7 @@ These reports record earlier development passes, with their original measured
 counts and limitations. Current setup and validation commands are in the
 [project README](../../README.md).
 
+- [Depth pass report (2026-09-25)](depth-pass-report.md) — the current pass
 - [Hardening and progression handoff](hardening-handoff.md)
 - [Balance output](balance-report.txt)
 - [Initial browser playtest](playtest-report.txt)

@@ -20,6 +20,7 @@ const PAL = {
   d: '#8a5a3b', D: '#6b4429', e: '#a9764f',  // wood
   m: '#7f8c9b', M: '#5a6572', n: '#9ba7b4',  // metal
   s: '#6fd3e8', S: '#2b7f92',                // screens
+  l: '#243844', L: '#1c2c36',                // screens switched off
   p: '#4caf50', P: '#2e7d32',                // plants
   k: '#e0b089', K: '#c08f68',                // skin
   h: '#4a3b30', H: '#2f2620',                // hair
@@ -71,8 +72,8 @@ const T = {
 // --- furniture ---------------------------------------------------------
 const F = {
   desk: [
-    '................', '....OOOOOOOO....', '....OssssssO....', '....OssssssO....',
-    '....OssssssO....', '....OSSSSSSO....', '....OOOOOOOO....', '......OOOO......',
+    '................', '....OOOOOOOO....', '....OllllllO....', '....OllllllO....',
+    '....OllllllO....', '....OLLLLLLO....', '....OOOOOOOO....', '......OOOO......',
     'OOOOOOOOOOOOOOOO', 'OddddddddddddddO', 'OdeeeeeeeeeeeedO', 'ODDDDDDDDDDDDDDO',
     'OOOOOOOOOOOOOOOO', '.O............O.', '.O............O.', '.O............O.'
   ],
@@ -141,6 +142,49 @@ const F = {
     '.....OssssO.....', '.....OSSSSO.....', '.....OOOOOO.....', '......OmmO......',
     '.....OOmmOO.....', '.....OmmmmO.....', '.....OmmmmO.....', '.....OMMMMO.....',
     '.....OmmmmO.....', '.....OOOOOO.....', '................', '................'
+  ],
+  // Drawn over a desk's monitor while someone is sitting at it.
+  screen_on: [
+    '................', '................', '.....ssssss.....', '.....suuSss.....',
+    '.....sSSuus.....', '.....SSSSSS.....', '................', '................',
+    '................', '................', '................', '................',
+    '................', '................', '................', '................'
+  ],
+  counter: [
+    '................', '................', 'OOOOOOOOOOOOOOOO', 'OnnnnnnnnnnnnnnO',
+    'OmmmmmmmmmmmmmmO', 'OMMMMMMMMMMMMMMO', 'OddddddddddddddO', 'OdeeeeeeeeeeeedO',
+    'OdeeeeeeeeeeeedO', 'OdeeeeeeeeeeeedO', 'ODDDDDDDDDDDDDDO', 'OOOOOOOOOOOOOOOO',
+    '................', '................', '................', '................'
+  ],
+  easel: [
+    '....OOOOOOOO....', '....OuuuuuuO....', '....OuxxuuuO....', '....OuxbbuuO....',
+    '....OuubbzzO....', '....OuuuzzuO....', '....OOOOOOOO....', '.....O....O.....',
+    '....O......O....', '....O......O....', '...O........O...', '...O........O...',
+    '..O..........O..', '................', '................', '................'
+  ],
+  headset: [
+    '................', '................', '....OOOOOOOO....', '...O........O...',
+    '..O..........O..', '..O..........O..', '.OOO........OOO.', '.OvO........OvO.',
+    '.OvO........OvO.', '.OOO........OOO.', '..........O.....', '.........OxO....',
+    '..........O.....', '................', '................', '................'
+  ],
+  screen: [
+    'OOOOOOOOOOOOOOOO', 'OSSSSSSSSSSSSSSO', 'OSppSSSSSSSSxxSO', 'OSppSSppSSSSxxSO',
+    'OSppSSppSSppSSSO', 'OSppSSppSSppSSSO', 'OSSSSSSSSSSSSSSO', 'OOOOOOOOOOOOOOOO',
+    '.......OO.......', '.......OO.......', '.....OOOOOO.....', '................',
+    '................', '................', '................', '................'
+  ],
+  mic: [
+    '................', '......OOOO......', '.....OMMMMO.....', '.....OMnnMO.....',
+    '.....OMnnMO.....', '.....OMMMMO.....', '......OOOO......', '.......OO.......',
+    '.......OO.......', '.......OO.......', '.....OOOOOO.....', '................',
+    '................', '................', '................', '................'
+  ],
+  trophy: [
+    '................', '...OOOOOOOOOO...', '..OOzzzzzzzzOO..', '.O.OzzzzzzzzO.O.',
+    '.O.OzzzzzzzzO.O.', '..OOzzzzzzzzOO..', '....OzzzzzzO....', '.....OzzzzO.....',
+    '......OzzO......', '......OzzO......', '.....OOOOOO.....', '....OddddddO....',
+    '....ODDDDDDO....', '....OOOOOOOO....', '................', '................'
   ],
   sign: [
     '................', '................', '..OOOOOOOOOOOO..', '..OzzzzzzzzzzO..',
@@ -251,6 +295,39 @@ export function buildTextures(scene) {
   // A 1x1 white pixel for cheap rectangles and highlights.
   paint(scene, 'px', ['t'], PAL);
   return true;
+}
+
+// --- emote bubbles ----------------------------------------------------------
+// 9x6 icons drawn inside an 11x10 speech bubble. They pop up over people for a
+// second or two so the office can be read at a glance: who is fighting a fire,
+// who is on a break, who is burnt out, who just closed a deal.
+const EMOTES = {
+  coffee: ['...U.U...', '..U.U....', '.dddddd..', '.ddddddd.', '.dddddd.d', '..dddd...'],
+  zzz: ['...bbbb..', '.....b...', '....bbbb.', 'bbb......', '.b.......', 'bbb......'],
+  alert: ['....x....', '....x....', '....x....', '....x....', '.........', '....x....'],
+  money: ['....p....', '..ppppp..', '..pp.....', '..ppppp..', '.....pp..', '..ppppp..'],
+  idea: ['...zzz...', '..zzzzz..', '..zzzzz..', '...zzz...', '...MMM...', '....M....'],
+  heart: ['.xx...xx.', 'xxxx.xxxx', 'xxxxxxxxx', '.xxxxxxx.', '..xxxxx..', '....x....'],
+  star: ['....z....', '...zzz...', 'zzzzzzzzz', '..zzzzz..', '.zz...zz.', 'z.......z'],
+  code: ['OOOOOOOO.', 'OsSsSssO.', 'OSssSsSO.', 'OOOOOOOO.', '...OO....', '..OOOO...'],
+  talk: ['.........', '.........', 'OO.OO.OO.', 'OO.OO.OO.', '.........', '.........'],
+  sweat: ['.......b.', '......bb.', '.....bbbb', '.....bbbb', '......bb.', '.........'],
+  sad: ['..MMMM...', '.MMMMMM..', 'MMMMMMMM.', '.........', '.b..b..b.', 'b..b..b..'],
+  fix: ['......MM.', '.....M.M.', '....MMM..', '...MM....', '..MM.....', '.MM......'],
+  question: ['..OOOO...', '.O....O..', '.....O...', '....O....', '.........', '....O....'],
+  rocket: ['....x....', '...xux...', '...uuu...', '..uuuuu..', '..q.u.q..', '...z.z...']
+};
+export const EMOTE_KEYS = Object.keys(EMOTES);
+
+function bubble(icon) {
+  const rows = ['.OOOOOOOOO.'];
+  for (const line of icon) rows.push(`O${line.replace(/\./g, 'u')}O`);
+  rows.push('.OOOOOOOOO.', '...OuO.....', '....O......');
+  return rows;
+}
+
+export function buildEmotes(scene) {
+  for (const [k, icon] of Object.entries(EMOTES)) paint(scene, `emo_${k}`, bubble(icon), PAL);
 }
 
 export const FURNITURE_KEYS = Object.keys(F).map((k) => `fx_${k}`);

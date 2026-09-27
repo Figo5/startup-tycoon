@@ -1,13 +1,17 @@
 import { makeRng, rnd, range, int, pick, chance } from './rng.js';
 import { clamp, uid } from './util.js';
-import { PRODUCT_CATEGORIES, categoryById, CUSTOMER_CLASSES } from '../data/products.js';
+import { PRODUCT_CATEGORIES, categoryById, CUSTOMER_CLASSES, approachById } from '../data/products.js';
 import { ROLES, roleById, DEPARTMENTS, FIRST_NAMES, LAST_NAMES, SPECIALTIES } from '../data/roles.js';
 import { COMPETITORS } from '../data/competitors.js';
 import { OFFICE_TIERS } from '../data/office.js';
 import { SCENARIOS, PRESTIGE_UPGRADES } from '../data/prestige.js';
 import { stageOrder } from '../data/stages.js';
+import { TRAITS, traitById } from '../data/traits.js';
+import { emptyMarket } from './market.js';
+import { makeRival } from './competitors.js';
+import { BACKGROUNDS, CHALLENGES } from '../data/legacy.js';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const REAL_SECONDS_PER_DAY = 120;   // 1 game day = 2 real minutes
 export const OFFLINE_CAP_HOURS = 16;
 export const MAX_OFFLINE_DAYS = (OFFLINE_CAP_HOURS * 3600) / REAL_SECONDS_PER_DAY;
@@ -70,6 +74,9 @@ export function normalizeMeta(meta) {
     levels[up.id] = clamp(Number.isFinite(raw) ? Math.floor(raw) : 0, 0, up.max);
   }
   m.upgrades = levels;
+  if (!m.records || typeof m.records !== 'object') m.records = {};
+  if (!Array.isArray(m.hallOfFame)) m.hallOfFame = [];
+  m.hallOfFame = m.hallOfFame.filter((h) => h && typeof h.name === 'string').slice(0, 12);
   return m;
 }
 
@@ -114,17 +121,79 @@ export function makeEmployee(rng, roleId, opts = {}) {
     assignment: null,
     isManager: roleId === 'manager',
     hiredDay: opts.hiredDay ?? 0,
-    desk: null
+    desk: null,
+    traits: Array.isArray(opts.traits) ? opts.traits.slice(0, 2) : [],
+    energy: 0.9,
+    story: [],
+    shipped: 0,
+    promotedDay: null,
+    leaveUntil: 0,
+    streak: 1
   };
+}
+
+// Traits that would describe the same person twice, or contradict each other.
+const TRAIT_CONFLICTS = [['workhorse', 'steady'], ['social', 'diva'], ['frugal', 'veteran'],
+  ['team_player', 'diva'], ['fast_learner', 'veteran']];
+const conflicts = (a, b) => TRAIT_CONFLICTS.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+
+/**
+ * Rolls 0-2 traits. Most people have one; stars always carry a rare or
+ * legendary one. Legendary people only turn up once the company is known.
+ */
+export function rollTraits(rng, { star = false, stage = 0, legendaryBonus = 0 } = {}) {
+  const out = [];
+  const pickRarity = (forceRare) => {
+    const leg = (stage >= 2 ? 0.03 : 0.004) + legendaryBonus + (forceRare ? 0.22 : 0);
+    const r = rnd(rng);
+    if (r < leg) return 'legendary';
+    if (forceRare || r < leg + 0.17) return 'rare';
+    return 'common';
+  };
+  const pickOne = (rarity) => {
+    const pool = TRAITS.filter((t) => t.rarity === rarity && !out.includes(t.id) && !out.some((o) => conflicts(o, t.id)));
+    return pool.length ? pick(rng, pool).id : null;
+  };
+  const roll = rnd(rng);
+  const count = star ? (roll < 0.35 ? 2 : 1) : roll < 0.32 ? 0 : roll < 0.86 ? 1 : 2;
+  for (let i = 0; i < count; i++) {
+    const t = pickOne(pickRarity(star && i === 0));
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+export const traitList = (e) => (Array.isArray(e?.traits) ? e.traits.map(traitById).filter(Boolean) : []);
+export const hasTrait = (e, id) => Array.isArray(e?.traits) && e.traits.includes(id);
+
+/** A short, capped personal history: the thing that makes a name a person. */
+export function addStory(e, day, text) {
+  if (!e) return;
+  if (!Array.isArray(e.story)) e.story = [];
+  e.story.push({ day: Math.floor(day || 0), text });
+  if (e.story.length > 8) e.story.splice(0, e.story.length - 8);
 }
 
 export function makeCandidate(rng, roleId, opts = {}) {
   const c = makeEmployee(rng, roleId, opts);
   c.id = uid('cand');
-  c.signingBonus = opts.referral ? 0 : Math.round((c.salary * 0.06) / 100) * 100;
   c.star = !!opts.star;
   if (c.star) { c.skill = Math.round(Math.min(12, c.skill + 2.5) * 10) / 10; c.salary = Math.round(c.salary * 1.35); }
+  applyTraits(c, rollTraits(rng, { star: c.star, stage: opts.stage || 0, legendaryBonus: opts.legendaryBonus || 0 }));
+  c.signingBonus = opts.referral ? 0 : Math.round((c.salary * 0.06) / 100) * 100;
   c.expiresDay = 0; // set by caller
+  return c;
+}
+
+/** Applies the one-time parts of a trait (skill, asking salary). */
+export function applyTraits(c, traits) {
+  c.traits = traits.slice(0, 2);
+  let salaryMul = 1;
+  for (const t of traitList(c)) {
+    if (t.effects.skill) c.skill = Math.round(Math.min(12, c.skill + t.effects.skill) * 10) / 10;
+    if (t.effects.salary) salaryMul += t.effects.salary;
+  }
+  c.salary = Math.round((c.salary * salaryMul) / 500) * 500;
   return c;
 }
 
@@ -158,27 +227,36 @@ export function makeProduct(rng, categoryId, name) {
     churnDay: 0,
     growthDay: 0,
     outage: 0,
-    launchedDay: null
+    launchedDay: null,
+    approach: 'standard',
+    featuresSinceMajor: 0,
+    hype: null,           // { until, acq, label } after a hit launch
+    launches: []          // recent launch outcomes, newest first
   };
 }
 
 export function makeProject(product, type) {
   const cat = categoryById(product.category);
+  const approach = approachById(product.approach);
   return {
     id: uid('prj'),
     typeId: type.id,
     name: type.name,
-    work: Math.round(cat.mvpWork * type.workMul * (1 + product.completed.length * 0.09)),
+    approach: approach.id,
+    work: Math.round(cat.mvpWork * type.workMul * (1 + product.completed.length * 0.09) * approach.work),
     done: 0
   };
 }
 
-export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Untitled Inc.' } = {}) {
+export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Untitled Inc.', startCategory = 'mobile',
+  background = 'generalist', challenges = [], cofounder = null } = {}) {
   const m = normalizeMeta(meta || emptyMeta());
   const fx = metaEffects(m);
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
   const rng = makeRng(seed ?? (Date.now() & 0x7fffffff));
 
+  const bg = BACKGROUNDS.find((b) => b.id === background) || BACKGROUNDS[0];
+  const chosenChallenges = (Array.isArray(challenges) ? challenges : []).filter((c) => CHALLENGES.some((x) => x.id === c));
   const founder = makeEmployee(rng, 'founder', {
     name: 'You', skillBonus: fx.founderSkill || 0, specialty: null, morale: 0.9
   });
@@ -189,12 +267,23 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
   for (let i = 0; i < (fx.startEngineers || 0); i++) {
     employees.push(makeEmployee(rng, 'senior_engineer', { hiredDay: 0 }));
   }
+  // A Loyal Co-Founder: someone from the hall of fame joins on day one.
+  if (fx.cofounder && Array.isArray(m.hallOfFame) && m.hallOfFame.length) {
+    const h = m.hallOfFame.find((x) => x.name === cofounder) || m.hallOfFame[0];
+    const role = ROLES.some((r) => r.id === h.role) ? h.role : 'engineer';
+    const e = makeEmployee(rng, role, { name: h.name, traits: (h.traits || []).filter((t) => traitById(t)), hiredDay: 0, morale: 0.95 });
+    e.skill = Math.round(Math.max(3, Math.min(12, (h.skill || 6) - 1)) * 10) / 10;
+    e.salary = Math.round((e.salary * 0.8) / 500) * 500;
+    e.story = [{ day: 0, text: `Co-founded this company, after ${h.company || 'the last one'}` }];
+    employees.push(e);
+  }
 
   const startTier = fx.startTier || 'garage';
   const departments = {};
   for (const d of DEPARTMENTS) departments[d.id] = { id: d.id, priority: 'balanced', managerId: null };
 
-  const product = makeProduct(rng, 'mobile');
+  const startCat = PRODUCT_CATEGORIES.some((c) => c.id === startCategory) ? startCategory : 'mobile';
+  const product = makeProduct(rng, startCat);
   product.projects.push(makeProject(product, { id: 'mvp', name: 'Build MVP', workMul: 1.0 }));
 
   const state = {
@@ -202,16 +291,20 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     seed: rng.s,
     rng,
     scenarioId: scenario.id,
+    background: bg.id,
+    challenges: chosenChallenges,
+    startCategory: startCat,
     time: { day: 0, paused: false, lastRealMs: Date.now(), startedRealMs: Date.now() },
     company: {
       name: companyName,
       stage: 'solo',
       reputation: 1 + (fx.startReputation || 0),
-      cash: 15000 + (fx.startCash || 0),
+      cash: 15000 + (fx.startCash || 0) + (bg.startCash || 0),
       founderEquity: 1,
       ownership: { soldTotal: 0, transactions: [] },
       totalRaised: 0,
       marketingBudget: 0,
+      pace: 'normal',
       lifetimeRevenue: 0,
       lifetimeExpenses: 0
     },
@@ -223,24 +316,22 @@ export function newGame({ seed, meta, scenarioId = 'standard', companyName = 'Un
     departments,
     infra: { capacity: 12, load: 0, reliability: 0.9, autoscale: false, spendDay: 0, outageTimer: 0 },
     research: { completed: (fx.startResearch || []).slice(), active: [], points: 0 },
-    funding: { rounds: [], offers: [], exitOffers: [] },
+    funding: { rounds: [], offers: [], exitOffers: [], targets: [], perks: [], exitMods: {}, loans: [] },
     contracts: [],
-    competitors: COMPETITORS.map((c) => ({
-      id: c.id,
-      name: c.name,
-      blurb: c.blurb,
-      strength: clamp(c.strength * (1 + (scenario.mods?.competitorStrength || 0)), 0.05, 1.2),
-      cash: c.cash,
-      markets: c.markets.slice(),
-      alive: true,
-      shares: Object.fromEntries(c.markets.map((mk) => [mk, c.strength * 0.25])),
-      acquired: false
-    })),
-    events: { pending: [], cooldown: 1.5, log: [], seen: {}, lastEventId: null, recentCats: [] },
+    competitors: COMPETITORS.map((c) => {
+      const r = makeRival(c, scenario.mods || {});
+      if (chosenChallenges.includes('hard_rivals')) { r.strength = Math.min(1.2, r.strength * 1.5 + 0.1); r.valuation *= 2; r.cash *= 2; }
+      return r;
+    }),
+    rivalState: { nemesis: null, wars: [], passed: [] },
+    events: { pending: [], cooldown: 1.5, log: [], seen: {}, lastEventId: null, recentCats: [], scheduled: [], lastTriggered: {} },
     advisors: emptyAdvisors(),
     goals: emptyGoals(),
     acquisitions: emptyAcquisitions(),
     exitResult: null,
+    alumni: [],
+    founderActions: { ready: {}, used: 0 },
+    market: chosenChallenges.includes('recession_start') ? { ...emptyMarket(), economy: 'recession', until: 45 } : emptyMarket(),
     boosts: [],
     stats: {
       revenueDay: 0, expenseDay: 0, payrollDay: 0, infraDay: 0, marketingDay: 0, rentDay: 0,
@@ -267,7 +358,9 @@ export function refreshCandidates(state, n) {
     const role = pick(state.rng, roles);
     const c = makeCandidate(state.rng, role.id, {
       skillBonus: (fx.candidateSkill || 0) + (state.modCache?.hireQuality || 0) * 2,
-      hiredDay: state.time.day
+      hiredDay: state.time.day,
+      stage: stageOrder(state.company.stage),
+      legendaryBonus: (fx.legendaryTalent || 0) + (state.modCache?.legendaryTalent || 0)
     });
     c.expiresDay = state.time.day + range(state.rng, 6, 14);
     state.candidates.push(c);

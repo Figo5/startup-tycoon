@@ -1,11 +1,14 @@
 import { clamp, sum, uid } from './util.js';
 import { tierById } from '../data/office.js';
+import { categoryById } from '../data/products.js';
 import { mul, flat } from './modifiers.js';
 import { liveProducts, totalCustomers } from './products.js';
 import { fire } from './workforce.js';
 import { acquiredRevenue } from './acquisitions.js';
 import { advisorRetainerDay } from './advisors.js';
 import { roadmapRunDay } from './roadmap.js';
+import { loanRepayment } from './funding.js';
+import { roomUpkeep } from './office.js';
 
 export const MISC_COST_PER_EMPLOYEE_DAY = 6;
 
@@ -35,7 +38,11 @@ export function slaPenalty(state, days) {
 }
 
 export function valuation(state, mods) {
-  const annual = state.stats.revenueDay * 365;
+  // Revenue is not all valued alike: a consulting business earns a third of the
+  // multiple a product company does.
+  let discount = 0;
+  for (const p of liveProducts(state)) discount += p.revenueDay * (1 - (categoryById(p.category)?.valuationMul ?? 1));
+  const annual = Math.max(0, state.stats.revenueDay - discount) * 365;
   const growth = clamp(state.stats.growthRate ?? 0, -0.5, 1.5);
   const qualityFactor = 1 + (state.products.length ? Math.max(...state.products.map((p) => p.quality)) : 0) * 0.35;
   const multiple = 7 * mods.stageValuationMul * qualityFactor * (1 + growth * 0.8) * mul(mods, 'valuation');
@@ -46,7 +53,8 @@ export function valuation(state, mods) {
 export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   const st = state.stats;
   const tier = tierById(state.office.tier);
-  const rent = tier ? tier.rent : 0;
+  const rent = (tier ? tier.rent : 0) + roomUpkeep(state);
+  if (Array.isArray(state.challenges) && state.challenges.includes('no_marketing')) state.company.marketingBudget = 0;
   const marketing = Math.max(0, state.company.marketingBudget);
   const misc = state.employees.length * MISC_COST_PER_EMPLOYEE_DAY;
   const contracts = contractRevenue(state);
@@ -54,9 +62,12 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   const advisors = advisorRetainerDay(state);
   const roadmap = roadmapRunDay(state);
   const penalties = slaPenalty(state, 1);
+  // Treasury management: idle cash earns interest.
+  const interest = mods.flags?.has?.('treasury') ? Math.max(0, state.company.cash) * 0.04 / 365 : 0;
+  state.stats.interestDay = interest;
 
-  const revDay = revenue + contracts + acquired - penalties;
-  const expDay = wf.payrollDay + infraCost + marketing + rent + misc + advisors + roadmap;
+  const revDay = revenue + contracts + acquired + interest - penalties;
+  let expDay = wf.payrollDay + infraCost + marketing + rent + misc + advisors + roadmap;
 
   st.revenueDay = revDay;
   st.payrollDay = wf.payrollDay;
@@ -67,6 +78,11 @@ export function tickEconomy(state, mods, wf, revenue, infraCost, days, log) {
   st.acquiredDay = acquired;
   st.advisorDay = advisors;
   st.roadmapDay = roadmap;
+  st.expenseDay = expDay;
+  // Loans are repaid as a slice of revenue: they cost more when you grow.
+  const loanPaid = loanRepayment(state, revDay, days);
+  st.loanDay = days > 0 ? loanPaid / days : 0;
+  expDay += st.loanDay;
   st.expenseDay = expDay;
   st.netDay = revDay - expDay;
   st.users = sum(liveProducts(state), (p) => p.users);

@@ -22,7 +22,10 @@
     </header>
 
     <main>
-      <section id="game" aria-label="Office view"></section>
+      <section id="game" aria-label="Office view">
+        <div id="founder-bar" role="toolbar" aria-label="Founder actions"></div>
+        <div id="office-hud" aria-live="off"></div>
+      </section>
       <aside id="side" aria-label="Events and notifications">
         <div id="events-wrap">
           <h2>Inbox</h2>
@@ -50,9 +53,10 @@
       <button data-panel="research">Research</button>
       <button data-panel="finance">Finance</button>
       <button data-panel="office">Office</button>
-      <button data-panel="competitors">Competitors</button>
+      <button data-panel="competitors">Market</button>
       <button data-panel="advisors">Advisors</button>
       <button data-panel="goals">Goals</button>
+      <button data-panel="legacy">Legacy</button>
     </nav>
 
     <div id="overlay" class="overlay" role="dialog" aria-modal="true" hidden>

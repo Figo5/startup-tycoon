@@ -208,3 +208,93 @@ hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* --- traits & people ---------------------------------------------------- */
+.tag.trait { margin-right: 3px; }
+.tag.trait-common { color: #b8b3c8; border-color: #4a4658; }
+.tag.trait-rare { color: #5aa9e6; border-color: #2f5f86; }
+.tag.trait-legendary { color: #f2b134; border-color: #8a6414; background: rgba(242, 177, 52, 0.08); }
+.trait-list { display: grid; gap: 4px; margin: 6px 0 10px; }
+ul.story { list-style: none; padding: 0; margin: 4px 0; }
+ul.story li { padding: 2px 0; border-bottom: 1px dashed #2a2735; }
+.tag.launch-flop { color: var(--bad); border-color: var(--bad); }
+.tag.launch-solid { color: #b8b3c8; }
+.tag.launch-hit { color: var(--good); border-color: var(--good); }
+.tag.launch-viral { color: var(--accent); border-color: var(--accent); background: rgba(242, 177, 52, 0.1); }
+#feed li.launch, #feed li.launch .tag { color: var(--accent); }
+#feed li.market, #feed li.market .tag { color: #8fd18f; }
+#feed li.rival, #feed li.rival .tag { color: #e58f6a; }
+
+/* --- founder bar & office HUD ------------------------------------------ */
+#founder-bar {
+  position: absolute; left: 10px; bottom: 10px;
+  display: flex; gap: 6px; z-index: 5; flex-wrap: wrap; max-width: calc(100% - 20px);
+}
+#founder-bar .fa {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 6px;
+  background: rgba(30, 27, 41, 0.92); border: 2px solid var(--line); color: var(--text);
+  padding: 5px 9px 7px; border-radius: 4px; font: 12px var(--mono); cursor: pointer;
+}
+#founder-bar .fa:hover:not(:disabled) { border-color: var(--accent); }
+#founder-bar .fa.off { color: var(--dim); cursor: default; }
+#founder-bar .fa i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); }
+#founder-bar .fa.off i { background: #5b5470; }
+#founder-bar .fa-key { font-size: 10px; color: var(--accent); border: 1px solid var(--line); padding: 0 4px; border-radius: 3px; }
+#office-hud {
+  position: absolute; left: 10px; top: 10px; z-index: 5; pointer-events: none;
+  background: rgba(21, 19, 29, 0.82); border: 1px solid var(--line); border-radius: 4px;
+  padding: 6px 8px; font-size: 11px; max-width: min(360px, 60%); display: grid; gap: 3px;
+}
+#office-hud:empty { display: none; }
+.hud-row { display: grid; grid-template-columns: 1fr 70px; gap: 8px; align-items: center; }
+.hud-row span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-bar { height: 5px; background: #2a2638; border-radius: 2px; overflow: hidden; }
+.hud-bar i { display: block; height: 100%; background: var(--accent); }
+.hud-bar.work i { background: var(--info); }
+.hud-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.hud-chip { font-size: 10px; border: 1px solid var(--line); padding: 0 5px; border-radius: 999px; }
+.hud-chip.good { color: var(--good); border-color: #2f5b37; }
+.hud-chip.bad { color: var(--bad); border-color: #6b2e2d; }
+.hud-chip.warn { color: var(--warn); }
+.hud-chip.accent { color: var(--accent); border-color: #8a6414; }
+.perk { padding: 2px 0; color: var(--dim); }
+.perk.on { color: var(--text); }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+.ach { border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; display: grid; gap: 2px; opacity: .55; }
+.ach.on { opacity: 1; border-color: #8a6414; background: rgba(242, 177, 52, 0.06); }
+.ach.on b { color: var(--accent); }
+.ach .tag { justify-self: start; }
+.fc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.fc-opt { border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; display: grid; gap: 2px; cursor: pointer; }
+.fc-opt:has(input:checked) { border-color: var(--accent); background: rgba(242, 193, 78, 0.07); }
+.fc-opt input { justify-self: start; }
+#overlay-card { max-height: 90vh; overflow: auto; }
+
+/* --- phones -------------------------------------------------------------- */
+@media (max-width: 640px) {
+  #topbar { gap: 6px 10px; padding: 6px 8px; }
+  .brand { font-size: 13px; flex: 1; min-width: 0; }
+  .brand #company-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #stats { order: 3; flex-basis: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 8px; }
+  #stats .stat { min-width: 0; }
+  #stats dt { font-size: 9px; }
+  #stats dd { font-size: 12px; }
+  /* The four numbers a phone check-in needs most, then the rest are one tap away. */
+  #stats .stat:nth-child(3), #stats .stat:nth-child(7), #stats .stat:nth-child(10) { display: none; }
+  main { grid-template-rows: 1fr 150px; }
+  #tabs { overflow-x: auto; flex-wrap: nowrap; }
+  #tabs button { flex: 0 0 auto; }
+  #office-hud { max-width: calc(100% - 20px); font-size: 10px; }
+  #founder-bar .fa { padding: 4px 6px 6px; font-size: 11px; }
+  #founder-bar .fa-name { display: none; }
+  .drawer { width: 100% !important; left: 0 !important; }
+  .grid.two { grid-template-columns: 1fr; }
+  #overlay-card { width: calc(100vw - 16px); padding: 12px; }
+  /* Inbox and activity side by side, each scrolling on its own. */
+  #side { grid-template-rows: 1fr; grid-template-columns: 1fr 1fr; }
+  #feed-wrap { border-left: 1px solid var(--line); min-height: 0; }
+  #events, #feed { overflow-y: auto; min-height: 0; }
+  #side h2 { font-size: 10px; padding: 4px 8px; }
+  /* On a phone the HUD keeps only stage progress and the chips. */
+  #office-hud .hud-row.small { display: none; }
+}

@@ -8,8 +8,10 @@ import { spawnEvent } from './sim/events.js';
 import { computeMods } from './sim/modifiers.js';
 import { save, load, exportSave, importSave, resetGame, resetAllProgress, claimTab } from './sim/save.js';
 import { performExit, startNextRun, availableScenarios } from './sim/prestige.js';
+import { foundCompanyForm } from './ui/panels.js';
 import { money, abbrev, fmtDuration } from './sim/util.js';
 import { stageById } from './data/stages.js';
+import { achievementById } from './data/legacy.js';
 
 const TAB_ID = Math.random().toString(36).slice(2);
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -27,10 +29,11 @@ const app = {
     if (kind === 'goal') app.celebrate(text);
   },
   refresh() { app.mods = computeMods(app.state); app.ui?.render(); },
-  celebrate(text) {
+  /** A visible moment for something the player waited on. The feed line was
+   *  already written by log(); writing it again here doubled every goal. */
+  celebrate() {
     const scene = app.game?.scene?.getScene('office');
     scene?.celebrate?.();
-    app.notify(text, 'goal');
   },
   togglePause() {
     if (app.state.exitResult) { app.notify('This run has already ended.', 'bad'); return; }
@@ -72,17 +75,37 @@ const app = {
     };
   },
   resetGame() {
-    app.ui.showOverlay(`<h2>Reset company</h2>
-      <p>This ends the current run without an exit and starts over. Founder Reputation and permanent upgrades are kept.</p>
+    app.ui.showOverlay(`<h2>Start a new company</h2>
+      <p>This ends the current run without an exit and starts over. Founder Reputation, upgrades, achievements and records are kept.</p>
       <div class="row"><button class="btn danger" id="doreset">Yes, start over</button>
       <button class="btn secondary" data-act="close-overlay">Cancel</button></div>`);
-    document.getElementById('doreset').onclick = () => {
-      app.state = resetGame(true);
+    document.getElementById('doreset').onclick = () => app.foundCompany({
+      title: 'Found a new company', note: 'The current company is abandoned without an exit.'
+    });
+  },
+  /**
+   * The one place a company is founded: pick a first product, a background,
+   * a market and (once unlocked) challenges. Keeps the founder's meta.
+   */
+  foundCompany({ title, note } = {}) {
+    const meta = app.state.meta;
+    app.ui.showOverlay(foundCompanyForm(meta, { name: randomCompanyName(), title, note }));
+    document.getElementById('fc-go').onclick = () => {
+      const val = (sel) => document.querySelector(sel)?.value;
+      const challenges = [...document.querySelectorAll('input[name="fc-ch"]:checked')].map((x) => x.value);
+      app.state = startNextRun(meta, {
+        companyName: (val('#fc-name') || '').trim() || randomCompanyName(),
+        scenarioId: val('#fc-scen') || 'standard',
+        startCategory: val('input[name="fc-cat"]:checked') || 'mobile',
+        background: val('input[name="fc-bg"]:checked') || 'generalist',
+        challenges,
+        cofounder: val('#fc-co') || null
+      });
       app.state.time.lastRealMs = Date.now();
       app.refresh();
       app.save();
       app.ui.hideOverlay();
-      app.notify('New company founded.', 'stage');
+      app.notify(`${app.state.company.name} is open for business.`, 'stage');
     };
   },
   /**
@@ -137,47 +160,38 @@ const app = {
         <div class="spread"><span>Founder Reputation earned</span><b style="color:var(--accent)">+${sum.rep} FR</b></div>
       </div>
       <p class="muted small">This stake has been sold. The run is over, and no exit can be taken twice.</p>
-      ${sum.achievements.length ? `<p class="small">Achievements: ${sum.achievements.join(', ')}</p>` : ''}
+      ${sum.achievements.length ? `<p class="small">New achievements: ${sum.achievements.map((id) => achievementById(id)?.name || id).join(', ')}${sum.achievementFr ? ` (+${sum.achievementFr} FR)` : ''}</p>` : ''}
+      <p class="small">Founder Reputation to spend: <b style="color:var(--accent)">${Math.floor(state.meta.founderRep)} FR</b></p>
       <hr />
       <h3>Start the next company</h3>
-      <label class="small">Name <input type="text" id="nextname" value="${randomCompanyName()}" /></label>
-      <label class="small">Market
-        <select id="nextscenario">${scenarios.map((s) => `<option value="${s.id}">${s.name} — ${s.desc} (${s.repMul}x FR)</option>`).join('')}</select>
-      </label>
+      <p class="muted small">New markets, starting products, backgrounds and challenges open up as you finish companies.
+      ${scenarios.length > 1 ? `${scenarios.length} markets available.` : ''}</p>
       <div class="row" style="margin-top:12px">
-        <button class="btn" id="donext">Found it</button>
+        <button class="btn" id="donext">Found the next company</button>
         <button class="btn secondary" data-act="open-prestige">Spend Founder Reputation first</button>
         <button class="btn secondary" data-act="close-overlay">Close (look around first)</button>
       </div>`);
-    document.getElementById('donext').onclick = () => {
-      const meta = state.meta;
-      app.state = startNextRun(meta, {
-        companyName: document.getElementById('nextname').value || randomCompanyName(),
-        scenarioId: document.getElementById('nextscenario').value
-      });
-      app.state.time.lastRealMs = Date.now();
-      app.refresh();
-      app.save();
-      app.ui.hideOverlay();
-      app.notify('A new company. Same founder.', 'stage');
-    };
+    document.getElementById('donext').onclick = () => app.foundCompany({ title: 'Found the next company', note: 'Same founder, new company.' });
   },
-  showHelp() {
-    app.ui.showOverlay(`<h2>How to play</h2>
+  showHelp(firstTime = false) {
+    app.ui.showOverlay(`<h2>${firstTime ? 'Welcome to Startup Tycoon' : 'How to play'}</h2>
       <p>You are a solo founder with one product and enough cash to last a few weeks. The company runs whether
       you are watching or not.</p>
       <ul class="small">
         <li><b>Passive</b> — close the tab. Up to ${OFFLINE_CAP_HOURS} hours of progress is credited when you come back.</li>
         <li><b>Management</b> — every minute or two there is something worth doing: hire, queue work, expand, spend.</li>
-        <li><b>Active</b> — some events offer a short puzzle (marked ▶). Optional, always, but they pay well.</li>
+        <li><b>Active</b> — founder actions along the bottom of the office (keys Z–M) give short boosts on a cooldown,
+          and some events offer a short puzzle (marked ▶). Optional, always.</li>
       </ul>
-      <p class="small"><b>Keys</b> — 1-8 open panels · Space pauses · Esc closes · WASD or arrows pan the office ·
-      Q/E or the wheel zoom · ? shows this.</p>
-      <p class="small"><b>The loop</b> — engineering turns payroll into shipped work; shipped work raises quality and
-      the size of your market; marketing and sales fill that market; support and reliability stop it leaking away.
-      Reaching the next company stage widens every market at once.</p>
+      <p class="small"><b>Keys</b> — 1-9, 0 open panels · L legacy · Z–M founder actions · Space pauses · Esc closes ·
+      WASD or arrows pan the office · Q/E or the wheel zoom · ? shows this.</p>
+      <p class="small"><b>The loop</b> — engineering turns payroll into shipped work; launches land as flops, hits or
+      viral moments; marketing and sales fill the market; support and reliability stop it leaking away. Your people
+      have traits, get tired and tell stories. Rivals, the economy and market trends move around you. Reaching the
+      next company stage widens every market at once, and an exit banks Founder Reputation for the next company.</p>
       <p class="small">Events left alone resolve conservatively. You will never come back to a destroyed company.</p>
-      <div class="row"><button class="btn" data-act="close-overlay">Got it</button></div>`);
+      <div class="row"><button class="btn" data-act="close-overlay">${firstTime ? 'Start with a consumer app' : 'Got it'}</button>
+      ${firstTime ? '<button class="btn secondary" data-act="found-company">Choose how to start</button>' : ''}</div>`);
   }
 };
 
@@ -217,7 +231,7 @@ function boot() {
     // there is something to collect.
     setTimeout(() => app.showExitSummary(), 300);
   } else if (summary && summary.gameDays > 0.25) showOfflineSummary(summary);
-  else if (!loaded.ok) app.showHelp();
+  else if (!loaded.ok) app.showHelp(true);
 
   app.game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -247,7 +261,7 @@ function boot() {
   window.__startupTycoon = app;
 
   document.getElementById('btn-pause').onclick = app.togglePause;
-  document.getElementById('btn-help').onclick = app.showHelp;
+  document.getElementById('btn-help').onclick = () => app.showHelp(false);
   document.getElementById('app').setAttribute('aria-busy', 'false');
 
   window.addEventListener('beforeunload', () => app.save());
@@ -290,9 +304,16 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
+function fmtRealTime(sec) {
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${String(m % 60).padStart(2, '0')}m`;
+}
+
 function showOfflineSummary(s) {
   const rows = [
-    ['Time away', fmtDuration(s.gameDays) + (s.capped ? ` (capped at ${OFFLINE_CAP_HOURS}h)` : '')],
+    ['Time away', `${fmtRealTime(s.realSeconds)} · ${Math.round(s.gameDays)} game days` + (s.capped ? ` (capped at ${OFFLINE_CAP_HOURS}h)` : '')],
     ['Revenue', money(s.revenue)],
     ['Expenses', money(s.expenses)],
     ['Net cash', money(s.cash)],

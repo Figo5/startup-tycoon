@@ -18,8 +18,17 @@ export const FUNDING_ROUNDS = [
 
 export const roundById = (id) => FUNDING_ROUNDS.find((r) => r.id === id);
 
-// Exit options unlocked at the late stage.
+// Exits. The first three need the Late Stage (or a buyer who came to you).
+// The others have their own doors: an acqui-hire is always there once you are
+// Growing, private equity buys profit rather than growth, and a merger needs a
+// rival big enough to merge with. `repMul` scales the Founder Reputation paid.
 export const EXITS = [
+  { id: 'acquihire', name: 'Acqui-hire', early: true, repMul: 0.7, stageBonus: true,
+    blurb: 'A big company buys the team, not the product. Small, fast, and always on the table once you are Growing.' },
+  { id: 'pe', name: 'Private Equity Buyout', early: true, repMul: 1.1, stageBonus: true,
+    blurb: 'A fund buys your profits at a multiple. Rewards a lean, profitable company over a fast-growing one.' },
+  { id: 'merger', name: 'Merger Of Equals', early: true, repMul: 1.1, stageBonus: true,
+    blurb: 'Combine with your biggest rival and take a stake in the giant. Needs a rival worth at least 40% of you.' },
   { id: 'acqui', name: 'Acquisition', multiple: 0.9, repMul: 1.0,
     blurb: 'A larger company buys you outright. Clean, fast, slightly cheap.' },
   { id: 'strategic', name: 'Strategic Acquisition', multiple: 1.25, repMul: 1.15, req: { reputation: 4 },
@@ -27,3 +36,28 @@ export const EXITS = [
   { id: 'ipo', name: 'IPO', multiple: 1.6, repMul: 1.35, req: { revenueDay: 900000, reputation: 5 },
     blurb: 'Public markets. Maximum value, highest bar to clear.' }
 ];
+
+// Who leads the round. Every round offers a choice of term sheets, so raising is
+// a decision about *what kind* of money, not just whether to take it.
+//   valMul    multiplier on the investor valuation
+//   size      fraction of the round's standard equity (and so of its cash)
+//   repMul    multiplier on the reputation the round brings
+//   target    a board growth target: revenue x `revenueMul` within `days`
+//   perk      permanent modifiers for the rest of the run
+//   exitMod   per-exit value modifiers (a strategic investor wants to buy you)
+export const INVESTORS = [
+  { id: 'lead', name: 'Lead Investor', valMul: 1, size: 1, repMul: 1,
+    blurb: 'A solid fund on standard terms. No surprises.' },
+  { id: 'small', name: 'Small Round', valMul: 0.95, size: 0.55, repMul: 0.6,
+    blurb: 'Take less money, give up far less of the company.' },
+  { id: 'tier1', name: 'Top-Tier VC', valMul: 1.3, size: 1, repMul: 1.8, target: { revenueMul: 2.2, days: 75 },
+    blurb: 'A famous partner and a premium price. The board expects revenue to more than double within 75 days.' },
+  { id: 'strategic', name: 'Strategic Investor', valMul: 1, size: 0.8, repMul: 1, minRound: 'series_a',
+    perk: { marketSize: 0.06, contractSize: 0.08 }, exitMod: { strategic: 0.15, ipo: -0.1 },
+    blurb: 'A big company in your market. Opens doors; would much rather buy you than see you go public.' }
+];
+export const investorById = (id) => INVESTORS.find((i) => i.id === id) || INVESTORS[0];
+
+// Revenue-based financing: cash now, repaid as a slice of revenue. No equity,
+// no board, and a real cost for bootstrappers who need runway.
+export const REVENUE_LOAN = { minStage: 'tiny', days: 90, repayMul: 1.35, share: 0.1, minRevenue: 100, floor: 20000 };

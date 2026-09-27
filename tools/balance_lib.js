@@ -23,6 +23,7 @@ import { advisorOffers, hireAdvisor } from '../src/sim/advisors.js';
 import { acquisitionOffers, acquireCompany } from '../src/sim/acquisitions.js';
 import { offeredGoals, acceptGoal } from '../src/sim/goals.js';
 import { money, abbrev } from '../src/sim/util.js';
+import { founderActionStatus, useFounderAction } from '../src/sim/org.js';
 
 export const DAYS_PER_REAL_HOUR = 3600 / REAL_SECONDS_PER_DAY;   // 30
 
@@ -52,6 +53,11 @@ export function operate(state, profile, marks) {
     } else if (choice) {
       resolveEvent(state, mods, p.id, choice.id, null);
     }
+  }
+
+  // 1b. An active player uses founder actions whenever they are ready.
+  if (profile.minigames) {
+    for (const a of founderActionStatus(state)) if (a.available) useFounderAction(state, a.id, null);
   }
 
   // 2. Keep engineering busy
@@ -218,13 +224,13 @@ export function operate(state, profile, marks) {
   const exits = exitPreview(state, mods).filter((e) => e.available);
   if (exits.length && !marks.exit && (state.company.stage === 'late' || profile.exitEarly)) {
     const best = exits.sort((a, b) => b.rep - a.rep)[0];
-    marks.exit = { day: state.time.day, name: best.name, value: best.value, rep: best.rep, equity: state.company.founderEquity };
+    marks.exit = { id: best.id, day: state.time.day, name: best.name, value: best.value, rep: best.rep, equity: state.company.founderEquity };
   }
 }
 
 export function run(seed, profileName, horizonDays, opts = {}) {
   const profile = { ...PROFILES[profileName], ...opts };
-  const state = newGame({ seed, meta: opts.meta || emptyMeta(), scenarioId: opts.scenarioId || 'standard' });
+  const state = newGame({ seed, meta: opts.meta || emptyMeta(), scenarioId: opts.scenarioId || 'standard', startCategory: opts.startCategory || 'mobile' });
   const marks = { stages: {} };
   const checkpoints = opts.checkpoints || [];
   const results = [];

@@ -5,6 +5,11 @@ import { ensureAdvisors } from './advisors.js';
 import { ensureGoals } from './goals.js';
 import { ensureAcquisitions } from './acquisitions.js';
 import { COMPETITORS } from '../data/competitors.js';
+import { ensureMarket } from './market.js';
+import { ensureFunding } from './funding.js';
+import { ensureFounderActions } from './org.js';
+import { makeRival, normalizeRival, ensureRivalState } from './competitors.js';
+import { SCENARIOS } from '../data/prestige.js';
 
 export const SAVE_KEY = 'startup-tycoon/save/v1';
 export const CORRUPT_KEY = 'startup-tycoon/corrupt';
@@ -66,6 +71,15 @@ const MIGRATIONS = {
     blob.meta = normalizeMeta(blob.meta || emptyMeta());
     blob.version = 4;
     return blob;
+  },
+  // v4 -> v5: the depth pass (traits, energy, market, rivals, legacy...).
+  // Additive again: existing employees get no traits rather than invented ones,
+  // and every new container starts empty.
+  4: (blob) => {
+    applyRunDefaults(blob.state);
+    blob.meta = normalizeMeta(blob.meta || emptyMeta());
+    blob.version = 5;
+    return blob;
   }
 };
 
@@ -84,6 +98,8 @@ export function applyRunDefaults(s) {
   s.events = s.events || { pending: [], cooldown: 2, log: [], seen: {} };
   if (!s.events.lastEventId) s.events.lastEventId = null;
   if (!Array.isArray(s.events.recentCats)) s.events.recentCats = [];
+  if (!Array.isArray(s.events.scheduled)) s.events.scheduled = [];
+  if (!s.events.lastTriggered || typeof s.events.lastTriggered !== 'object') s.events.lastTriggered = {};
   if (s.exitResult === undefined) s.exitResult = null;
   s.advisors = ensureAdvisors(s);
   s.goals = ensureGoals(s);
@@ -95,13 +111,53 @@ export function applyRunDefaults(s) {
       if (!Number.isFinite(p[k])) p[k] = 0;
     }
   }
-  // Rivals saved before blurbs were stored keep their description.
-  for (const c of s.competitors || []) {
-    if (!c.blurb) c.blurb = COMPETITORS.find((x) => x.id === c.id)?.blurb || '';
+  // v5 people fields. Nobody is given a trait retroactively.
+  for (const e of [...(s.employees || []), ...(s.candidates || [])]) normalizePerson(e);
+  if (!Array.isArray(s.alumni)) s.alumni = [];
+  ensureMarket(s);
+  ensureFunding(s);
+  ensureFounderActions(s);
+  for (const p of s.products || []) {
+    if (!['rush', 'standard', 'polish'].includes(p.approach)) p.approach = 'standard';
+    if (!Number.isFinite(p.featuresSinceMajor)) p.featuresSinceMajor = 0;
+    if (!Array.isArray(p.launches)) p.launches = [];
+    if (p.hype && !Number.isFinite(p.hype.until)) p.hype = null;
+    for (const prj of p.projects || []) if (!prj.approach) prj.approach = 'standard';
   }
+  if (!Array.isArray(s.soldProducts)) s.soldProducts = [];
+  if (typeof s.background !== 'string') s.background = 'generalist';
+  if (!Array.isArray(s.challenges)) s.challenges = [];
+  if (typeof s.startCategory !== 'string') s.startCategory = s.products?.[0]?.category || 'mobile';
+  if (!['relaxed', 'normal', 'crunch'].includes(s.company.pace)) s.company.pace = 'normal';
+  // Rivals saved before blurbs were stored keep their description.
+  if (!Array.isArray(s.competitors)) s.competitors = [];
+  for (const c of s.competitors) {
+    if (!c.blurb) c.blurb = COMPETITORS.find((x) => x.id === c.id)?.blurb || '';
+    normalizeRival(c);
+  }
+  // Rivals added in later versions join an existing market as newcomers.
+  const scen = SCENARIOS.find((x) => x.id === s.scenarioId) || SCENARIOS[0];
+  for (const def of COMPETITORS) {
+    if (!s.competitors.some((c) => c.id === def.id)) s.competitors.push(makeRival(def, scen.mods || {}));
+  }
+  ensureRivalState(s);
   // A settled run stays settled across a reload.
   if (s.exitResult) s.time.paused = true;
   return s;
+}
+
+export function normalizePerson(e) {
+  if (!e || typeof e !== 'object') return e;
+  if (!Array.isArray(e.traits)) e.traits = [];
+  e.traits = e.traits.filter((t) => typeof t === 'string').slice(0, 2);
+  if (!Number.isFinite(e.energy)) e.energy = 0.9;
+  e.energy = Math.min(1, Math.max(0, e.energy));
+  if (!Array.isArray(e.story)) e.story = [];
+  if (!Number.isFinite(e.shipped)) e.shipped = 0;
+  if (e.promotedDay === undefined) e.promotedDay = null;
+  if (!Number.isFinite(e.leaveUntil)) e.leaveUntil = 0;
+  if (!Number.isFinite(e.streak)) e.streak = 1;
+  return e;
 }
 
 export function migrate(blob) {

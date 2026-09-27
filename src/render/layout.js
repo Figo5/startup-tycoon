@@ -15,6 +15,11 @@ const ROOM_DECOR = {
   lab: [['server', 1, 1], ['whiteboard', 3, 1], ['shelf', 4, 1], ['desk_plain', 2, 3], ['plant', 4, 3]],
   gym: [['rug', 1, 1], ['rug', 3, 1], ['shelf', 4, 3], ['water', 1, 3]],
   exec: [['desk', 2, 1], ['shelf', 4, 1], ['plant', 1, 3], ['sofa', 3, 3]],
+  podcast: [['mic', 1, 2], ['mic', 3, 2], ['table', 2, 3], ['shelf', 4, 1]],
+  support_center: [['headset', 1, 1], ['desk', 2, 1], ['screen', 4, 1], ['desk', 1, 3], ['desk', 3, 3]],
+  design_studio: [['easel', 1, 1], ['easel', 3, 1], ['table', 2, 3], ['plant', 4, 3]],
+  war_room: [['screen', 1, 1], ['screen', 2, 1], ['screen', 4, 1], ['table', 2, 3], ['chair', 1, 3]],
+  cafeteria: [['counter', 1, 1], ['counter', 2, 1], ['table', 1, 3], ['table', 3, 3], ['coffee', 4, 1]],
   datacenter: [['server', 1, 1], ['server', 2, 1], ['server', 3, 1], ['server', 4, 1],
     ['server', 1, 3], ['server', 2, 3], ['server', 3, 3], ['server', 4, 3]]
 };
@@ -110,6 +115,10 @@ export function buildLayout(tierId, ownedRooms = []) {
 
   const walkable = tiles.map((row, y) => row.map((ch, x) =>
     ch !== '#' && ch !== '=' && !blocked.has(`${x},${y}`)));
+
+  // The office fills up from the entrance: new people sit near the door, and a
+  // half-empty floor reads as "room to grow" rather than scattered strangers.
+  deskSlots.sort((a, b) => (Math.abs(a.x - doorX) + (H - a.y) * 1.6) - (Math.abs(b.x - doorX) + (H - b.y) * 1.6));
 
   return { tierId, w: W, h: H, tiles, furniture, deskSlots, rooms, walkable, doorX };
 }
